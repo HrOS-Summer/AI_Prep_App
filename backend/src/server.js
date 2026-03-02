@@ -19,9 +19,9 @@ if (ENV.NODE_ENV === 'production') {
     app.use(express.static(frontendPath));
 
     // Only fallback to index.html if the request isn't for an /api route
-    app.get(/^(?!\/api).+/, (req, res) => {
+    app.get(/^(?!\/api).+/, (req, res) => {     // This regex matches any route that does NOT start with /api
         res.sendFile(path.join(frontendPath, 'index.html'));
-    });
+    }); 
 }
 
 app.listen(ENV.PORT, () => {
