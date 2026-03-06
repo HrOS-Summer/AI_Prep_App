@@ -6,6 +6,8 @@ import { motion } from "framer-motion";
 import { BookOpen, Mic, HelpCircle, Trophy, TrendingUp, CheckCircle2, Loader2, XCircle } from "lucide-react";
 import { toast } from "sonner";
 
+import LoadingCube from "@/components/animations/LoadingCube";
+
 interface QuizRecord {
   _id: string;
   score: string;
@@ -18,6 +20,8 @@ interface DashboardData {
     total_interviews: number;
     quiz_ratio: string;
     avg_interview_score: string;
+    path_ratio: string;
+    path_percentage: string; // Add this line
   };
   quiz_overview: QuizRecord[];
 }
@@ -59,9 +63,19 @@ const StudentDashboard = () => {
 
   if (loading) {
     return (
-      <div className="h-[80vh] flex flex-col items-center justify-center gap-4">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        <p className="text-muted-foreground animate-pulse">Loading your dashboard...</p>
+      <div className="h-[80vh] flex flex-col items-center justify-center gap-6">
+        {/* Replace lucide Loader2 with your custom brand loader */}
+        <LoadingCube />
+        
+        {/* Retain your text but change the animation for a better match */}
+        <motion.p 
+          initial={{ opacity: 0 }}
+          animate={{ opacity: [0.5, 1, 0.5] }}
+          transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
+          className="text-muted-foreground text-lg font-medium text-center px-4"
+        >
+          Analyzing your interview readiness...
+        </motion.p>
       </div>
     );
   }
@@ -115,12 +129,19 @@ const StudentDashboard = () => {
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Overall Readiness</span>
-                  <span className="font-semibold">{data?.metrics.avg_interview_score}</span>
+                  {/* Displays the string exactly as received: "0.0%" */}
+                  <span className="font-semibold text-primary">
+                    {data?.metrics.path_percentage || "0%"}
+                  </span>
                 </div>
-                <Progress value={parseFloat(data?.metrics.avg_interview_score || "0")} className="h-2" />
+                {/* parseFloat converts "0.0%" to 0.0 for the progress bar value */}
+                <Progress 
+                  value={parseFloat(data?.metrics.path_percentage || "0")} 
+                  className="h-2" 
+                />
               </div>
               <div className="p-4 rounded-xl bg-primary/5 border border-primary/10 text-xs text-muted-foreground leading-relaxed">
-                Consistency is key! Keep taking quizzes to improve your average score.
+                Consistency is key! Complete your learning path to reach 100% readiness.
               </div>
             </CardContent>
           </Card>
@@ -128,49 +149,57 @@ const StudentDashboard = () => {
 
         {/* Recent Quizzes List */}
         <div className="lg:col-span-2">
-          <Card className="shadow-card border-border/50">
-            <CardHeader className="pb-3 flex flex-row items-center justify-between">
-              <CardTitle className="text-base">Recent Quiz Activity</CardTitle>
-              <span className="text-xs text-muted-foreground">Last {data?.quiz_overview.length} attempts</span>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {data?.quiz_overview && data.quiz_overview.length > 0 ? (
-                  data.quiz_overview.map((quiz, i) => (
-                    <motion.div 
-                      key={quiz._id} 
-                      initial={{ opacity: 0, x: 10 }} 
-                      animate={{ opacity: 1, x: 0 }} 
-                      transition={{ delay: i * 0.05 }}
-                      className="flex items-center justify-between p-3 rounded-lg bg-muted/30 border border-transparent hover:border-border transition-colors"
-                    >
-                      <div className="flex items-center gap-3">
-                        {quiz.status === "pass" ? (
-                          <CheckCircle2 className="h-5 w-5 text-success" />
-                        ) : (
-                          <XCircle className="h-5 w-5 text-destructive" />
-                        )}
-                        <div>
-                          <p className="text-sm font-semibold">Quiz Attempt #{data.quiz_overview.length - i}</p>
-                          <p className="text-[10px] text-muted-foreground uppercase">
-                            {new Date(quiz.updatedAt).toLocaleDateString()} at {new Date(quiz.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <span className={`text-sm font-bold px-2 py-1 rounded-md ${quiz.status === "pass" ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive"}`}>
-                          {quiz.score}%
-                        </span>
-                      </div>
-                    </motion.div>
-                  ))
-                ) : (
-                  <p className="text-sm text-center py-10 text-muted-foreground">No quiz activity found.</p>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+  <Card className="shadow-card border-border/50">
+    <CardHeader className="pb-3 flex flex-row items-center justify-between">
+      <CardTitle className="text-base">Recent Quiz Activity</CardTitle>
+      <span className="text-xs text-muted-foreground">Last {data?.quiz_overview.length} attempts</span>
+    </CardHeader>
+    <CardContent>
+      <div className="space-y-3">
+        {data?.quiz_overview && data.quiz_overview.length > 0 ? (
+          // Use [...data.quiz_overview].reverse() to show latest first
+          [...data.quiz_overview].reverse().map((quiz, i) => {
+            // Recalculate the attempt number based on original length
+            // Latest attempt will be Attempt #TotalCount
+            const attemptNumber = data.quiz_overview.length - i;
+
+            return (
+              <motion.div 
+                key={quiz._id} 
+                initial={{ opacity: 0, x: 10 }} 
+                animate={{ opacity: 1, x: 0 }} 
+                transition={{ delay: i * 0.05 }}
+                className="flex items-center justify-between p-3 rounded-lg bg-muted/30 border border-transparent hover:border-border transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  {quiz.status === "pass" ? (
+                    <CheckCircle2 className="h-5 w-5 text-success" />
+                  ) : (
+                    <XCircle className="h-5 w-5 text-destructive" />
+                  )}
+                  <div>
+                    {/* Updated logic: Correct attempt numbering for reversed list */}
+                    <p className="text-sm font-semibold">Quiz Attempt #{attemptNumber}</p>
+                    <p className="text-[10px] text-muted-foreground uppercase">
+                      {new Date(quiz.updatedAt).toLocaleDateString()} at {new Date(quiz.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <span className={`text-sm font-bold px-2 py-1 rounded-md ${quiz.status === "pass" ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive"}`}>
+                    {quiz.score}%
+                  </span>
+                </div>
+              </motion.div>
+            );
+          })
+        ) : (
+          <p className="text-sm text-center py-10 text-muted-foreground">No quiz activity found.</p>
+        )}
+      </div>
+    </CardContent>
+  </Card>
+</div>
       </div>
     </div>
   );

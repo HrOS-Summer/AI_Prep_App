@@ -1,18 +1,30 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <!-- TODO: Set the document title to the name of your application -->
-    <title>Prepzen</title>
-    <meta name="description" content="AI powered web app to help candidates prepare for technical interview" />
-    <meta name="author" content="Prepzen" />
+    <title>Prepzen | AI Interview Preparation</title>
+    <meta name="description" content="AI powered web app to help candidates prepare for technical interviews." />
 
-    <!-- TODO: Update og:title to match your application name -->
     <meta property="og:title" content="Prepzen" />
-    <meta property="og:description" content="AI powered web app to help candidates prepare for technical interview" />
+    <meta property="og:description" content="Master your technical interviews with AI-powered training." />
     <meta property="og:type" content="website" />
-    
+
+    <script>
+      (function() {
+        try {
+          var theme = localStorage.getItem('prepzen-theme');
+          var supportDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches === true;
+          if (theme === 'dark' || (!theme && supportDarkMode)) {
+            document.documentElement.classList.add('dark');
+          } else {
+            document.documentElement.classList.remove('dark');
+          }
+        } catch (e) {
+          console.error("Theme script error:", e);
+        }
+      })();
+    </script>
   </head>
 
   <body>

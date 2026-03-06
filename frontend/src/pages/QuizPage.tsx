@@ -1,19 +1,23 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   CheckCircle2, 
-  XCircle, 
-  Loader2, 
-  AlertCircle, 
   Trophy, 
   ArrowRight, 
-  RefreshCcw 
+  RefreshCcw,
+  Loader2,
+  AlertCircle,
+  ChevronRight,
+  ChevronLeft,
+  SendHorizontal,
+  XCircle
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
+import { Progress } from "@/components/ui/progress";
 
 interface Question {
   id: number;
@@ -26,21 +30,50 @@ const QuizPage = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   
-  // State Management
   const [questions, setQuestions] = useState<Question[]>([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<number, number>>({});
-  const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(true);
   const [submittingScore, setSubmittingScore] = useState(false);
   const [domain, setDomain] = useState("");
-  
-  // New state to hold the response data from FastAPI
   const [resultData, setResultData] = useState<{ score: string; status: string } | null>(null);
+  const [direction, setDirection] = useState(0); 
+  const [isReviewMode, setIsReviewMode] = useState(false);
 
-  // 1. Fetch Quiz Data Dynamically
+  // Animation variants for the card slide effect
+  const variants = {
+    enter: (direction: number) => ({
+      x: direction > 0 ? 300 : -300,
+      opacity: 0,
+    }),
+    center: {
+      zIndex: 1,
+      x: 0,
+      opacity: 1,
+    },
+    exit: (direction: number) => ({
+      zIndex: 0,
+      x: direction < 0 ? 300 : -300,
+      opacity: 0,
+    }),
+  };
+
+  // 1. Fetch or Load from Cache
   useEffect(() => {
-    const fetchQuiz = async () => {
+    const initQuiz = async () => {
       if (!user?.employee_id) return;
+
+      const cachedQuiz = localStorage.getItem(`active_quiz_${user.employee_id}`);
+      const cachedAnswers = localStorage.getItem(`answers_${user.employee_id}`);
+
+      if (cachedQuiz) {
+        const parsed = JSON.parse(cachedQuiz);
+        setQuestions(parsed.questions);
+        setDomain(parsed.domain);
+        if (cachedAnswers) setAnswers(JSON.parse(cachedAnswers));
+        setLoading(false);
+        return;
+      }
 
       try {
         const response = await fetch("https://prepzen-api.onrender.com/quiz/get-quiz", {
@@ -48,33 +81,58 @@ const QuizPage = () => {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ employee_id: user.employee_id }),
         });
-
+        
         const data = await response.json();
-
         if (data.status_code === 200) {
           setQuestions(data.quiz);
           setDomain(data.domain);
+          localStorage.setItem(`active_quiz_${user.employee_id}`, JSON.stringify({
+            questions: data.quiz,
+            domain: data.domain
+          }));
         } else {
           toast.error(data.message || "Failed to load quiz");
         }
       } catch (error) {
-        console.error("Quiz fetch error:", error);
         toast.error("Network error. Could not fetch quiz.");
       } finally {
         setLoading(false);
       }
     };
-
-    fetchQuiz();
+    initQuiz();
   }, [user?.employee_id]);
 
-  const scoreCount = questions.filter((q) => answers[q.id] === q.correct).length;
+  useEffect(() => {
+    if (user?.employee_id && Object.keys(answers).length > 0) {
+      localStorage.setItem(`answers_${user.employee_id}`, JSON.stringify(answers));
+    }
+  }, [answers, user?.employee_id]);
 
-  // 2. Submit Quiz and Sync with Backend
+  const handleNext = useCallback(() => {
+    if (currentIndex < questions.length - 1) {
+      setDirection(1);
+      setCurrentIndex((prev) => prev + 1);
+    }
+  }, [currentIndex, questions.length]);
+
+  const handlePrev = useCallback(() => {
+    if (currentIndex > 0) {
+      setDirection(-1);
+      setCurrentIndex((prev) => prev - 1);
+    }
+  }, [currentIndex]);
+
+  const handleOptionSelect = (optionIndex: number) => {
+    if (isReviewMode) return;
+    setAnswers((prev) => ({ ...prev, [questions[currentIndex].id]: optionIndex }));
+    setTimeout(() => {
+      if (currentIndex < questions.length - 1) handleNext();
+    }, 400);
+  };
+
   const handleSubmitQuiz = async () => {
-    setSubmitted(true);
     setSubmittingScore(true);
-
+    const scoreCount = questions.filter((q) => answers[q.id] === q.correct).length;
     const percentage = Math.round((scoreCount / questions.length) * 100);
 
     try {
@@ -86,225 +144,197 @@ const QuizPage = () => {
           score: percentage.toString(),
         }),
       });
-
       const result = await response.json();
-
       if (response.ok && result.status_code === 200) {
-        setResultData({
-          score: result.data.score,
-          status: result.data.status,
-        });
-        toast.success(result.message);
-      } else {
-        toast.error("Failed to save result on server.");
+        setResultData({ score: result.data.score, status: result.data.status });
+        localStorage.removeItem(`active_quiz_${user?.employee_id}`);
+        localStorage.removeItem(`answers_${user?.employee_id}`);
+        toast.success("Assessment Complete!");
       }
     } catch (error) {
-      console.error("Error submitting score:", error);
       toast.error("Network error syncing results.");
     } finally {
       setSubmittingScore(false);
     }
   };
 
-  // --- VIEW: LOADING ---
-  if (loading) {
-    return (
-      <div className="h-[60vh] flex flex-col items-center justify-center gap-4">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        <p className="text-muted-foreground animate-pulse">Generating your {user?.domain} quiz...</p>
-      </div>
-    );
-  }
+  if (loading) return (
+    <div className="h-[70vh] flex flex-col items-center justify-center gap-4">
+      <Loader2 className="h-10 w-10 animate-spin text-primary" />
+      <p className="text-muted-foreground animate-pulse text-lg font-medium text-center px-4">
+        Preparing your assessment...
+      </p>
+    </div>
+  );
 
-  // --- VIEW: COMPLETION SCREEN (Triggered after resultData is set) ---
-  if (resultData) {
+  if (resultData && !isReviewMode) {
     const isPass = resultData.status === "pass";
-
     return (
-      <div className="min-h-[70vh] flex items-center justify-center p-4">
-        <motion.div 
-          initial={{ opacity: 0, scale: 0.9 }} 
-          animate={{ opacity: 1, scale: 1 }}
-          className="w-full max-w-md"
-        >
-          <Card className="text-center shadow-elevated border-primary/20">
-            <CardHeader>
-              <div className="mx-auto h-20 w-20 rounded-full bg-primary/10 flex items-center justify-center mb-4">
-                {isPass ? (
-                  <Trophy className="h-10 w-10 text-primary animate-bounce" />
-                ) : (
-                  <AlertCircle className="h-10 w-10 text-destructive" />
-                )}
-              </div>
-              <CardTitle className="text-3xl font-bold">
-                {isPass ? "Congratulations!" : "Keep Practicing!"}
-              </CardTitle>
-              <CardDescription className="text-lg">
-                You scored <span className="font-bold text-foreground">{resultData.score}%</span> in {domain}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="p-4 rounded-lg bg-muted/50 text-sm">
-                {isPass 
-                  ? "Great job! You have cleared the baseline for this domain. You are now eligible to proceed to the AI Interview stage."
-                  : "You need at least 75% to pass. Review the correct answers below and try again to unlock the interview stage."
-                }
-              </div>
-
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="max-w-md mx-auto py-10 px-4">
+        <Card className="text-center border-2 border-primary/10 overflow-hidden shadow-xl">
+          <div className={`h-2 ${isPass ? 'bg-green-500' : 'bg-amber-500'}`} />
+          <CardHeader>
+            <div className="mx-auto h-20 w-20 rounded-full bg-primary/5 flex items-center justify-center mb-4">
+              {isPass ? <Trophy className="h-10 w-10 text-primary animate-bounce" /> : <AlertCircle className="h-10 w-10 text-amber-500" />}
+            </div>
+            <CardTitle className="text-3xl font-bold">{isPass ? "Excellent!" : "Keep Pushing!"}</CardTitle>
+            <CardDescription className="text-lg">You secured <span className="font-bold text-foreground">{resultData.score}%</span> in {domain}</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
               <div className="flex flex-col gap-3">
+                <Button variant="default" className="h-12 font-bold" onClick={() => setIsReviewMode(true)}>
+                  Review Your Answers
+                </Button>
                 {isPass ? (
-                  <Button 
-                    className="gradient-primary text-primary-foreground h-12 text-lg font-bold"
-                    onClick={() => navigate("/interview")}
-                  >
+                  <Button className="gradient-primary h-12 text-lg font-bold" onClick={() => navigate("/interview")}>
                     Start AI Interview <ArrowRight className="ml-2 h-5 w-5" />
                   </Button>
                 ) : (
-                  <Button 
-                    variant="outline"
-                    className="h-12 text-lg font-bold"
-                    onClick={() => {
-                      setResultData(null);
-                      setSubmitted(false);
-                      setAnswers({});
-                      window.scrollTo({ top: 0, behavior: 'smooth' });
-                    }}
-                  >
-                    <RefreshCcw className="mr-2 h-5 w-5" /> Try Again
+                  <Button variant="outline" className="h-12 text-lg font-bold" onClick={() => window.location.reload()}>
+                    <RefreshCcw className="mr-2 h-5 w-5" /> Retake Assessment
                   </Button>
                 )}
-                
-                <Button variant="ghost" onClick={() => navigate("/dashboard")}>
-                  Back to Dashboard
-                </Button>
+                <Button variant="ghost" onClick={() => navigate("/dashboard")}>Return to Dashboard</Button>
               </div>
-            </CardContent>
-          </Card>
-        </motion.div>
-      </div>
+          </CardContent>
+        </Card>
+      </motion.div>
     );
   }
 
-  // --- VIEW: QUIZ IN PROGRESS ---
-  if (questions.length === 0) {
-    return (
-      <div className="h-[60vh] flex flex-col items-center justify-center text-center gap-4">
-        <AlertCircle className="h-12 w-12 text-destructive" />
-        <h2 className="text-xl font-bold">No Quiz Available</h2>
-        <p className="text-muted-foreground">We couldn't find a quiz for your current domain.</p>
-      </div>
-    );
-  }
+  const currentQuestion = questions[currentIndex];
+  const progress = questions.length > 0 ? ((currentIndex + 1) / questions.length) * 100 : 0;
 
   return (
-    <div className="space-y-6 max-w-3xl pb-10">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">{domain} Quiz</h1>
-          <p className="text-sm text-muted-foreground">Answer all {questions.length} questions to proceed</p>
+    <div className="max-w-2xl mx-auto px-4 py-8 space-y-8">
+      <div className="space-y-4">
+        <div className="flex justify-between items-end gap-4">
+          <div className="flex-1">
+            <h2 className="text-2xl md:text-3xl font-extrabold tracking-tight truncate">
+              {isReviewMode ? "Review: " : ""}{domain}
+            </h2>
+            <p className="text-muted-foreground text-sm">Question {currentIndex + 1} of {questions.length}</p>
+          </div>
+          {isReviewMode && (
+            <Button variant="outline" size="sm" onClick={() => setIsReviewMode(false)}>Exit Review</Button>
+          )}
         </div>
-        {submitted && (
-          <motion.div 
-            initial={{ scale: 0.8, opacity: 0 }} 
-            animate={{ scale: 1, opacity: 1 }}
-            className="text-right"
-          >
-            <p className="text-2xl font-bold">{scoreCount}/{questions.length}</p>
-            <p className={`text-sm font-bold ${scoreCount >= 7 ? "text-success" : "text-destructive"}`}>
-              {scoreCount >= 7 ? "Passed!" : "Try again"}
-            </p>
-          </motion.div>
-        )}
+        <Progress value={progress} className="h-2 rounded-full" />
       </div>
 
-      <div className="space-y-4">
-        {questions.map((q, i) => (
-          <motion.div 
-            key={q.id} 
-            initial={{ opacity: 0, x: -10 }} 
-            animate={{ opacity: 1, x: 0 }} 
-            transition={{ delay: i * 0.05 }}
+      <div className="relative min-h-[450px]">
+        <AnimatePresence initial={false} custom={direction} mode="wait">
+          <motion.div
+            key={currentIndex}
+            custom={direction}
+            variants={variants}
+            initial="enter"
+            animate="center"
+            exit="exit"
+            transition={{ x: { type: "spring", stiffness: 300, damping: 30 }, opacity: { duration: 0.2 } }}
+            className="w-full"
           >
-            <Card className={`shadow-card border-border/50 transition-all ${submitted && answers[q.id] !== q.correct ? "border-destructive/20" : ""}`}>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-semibold flex items-start gap-3">
-                  <span className="text-xs bg-muted px-2 py-1 rounded text-muted-foreground">Q{i + 1}</span>
-                  <span className="flex-1 leading-relaxed">{q.question}</span>
-                  {submitted && (
-                    answers[q.id] === q.correct
-                      ? <CheckCircle2 className="h-5 w-5 text-success shrink-0" />
-                      : <XCircle className="h-5 w-5 text-destructive shrink-0" />
-                  )}
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 gap-2">
-                  {q.options.map((opt, oi) => {
-                    const selected = answers[q.id] === oi;
-                    const isCorrect = q.correct === oi;
-                    let extraClass = "text-sm h-auto py-3 px-4 justify-start text-left whitespace-normal leading-snug ";
-
-                    if (submitted) {
-                      if (isCorrect) {
-                        extraClass += "border-success bg-success/10 text-success font-medium shadow-[0_0_10px_rgba(34,197,94,0.1)]";
-                      } else if (selected && !isCorrect) {
-                        extraClass += "border-destructive bg-destructive/10 text-destructive";
-                      } else {
-                        extraClass += "opacity-50";
-                      }
-                    } else if (selected) {
-                      extraClass += "border-primary bg-primary/5 ring-1 ring-primary";
+            {currentQuestion && (
+              <Card className="shadow-2xl border-primary/5 overflow-hidden">
+                <CardHeader className="pb-4">
+                  <CardTitle className="text-lg md:text-xl leading-snug font-semibold text-card-foreground">
+                    {currentQuestion.question}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="grid gap-3">
+                  {currentQuestion.options.map((option, idx) => {
+                    const isSelected = answers[currentQuestion.id] === idx;
+                    const isCorrect = currentQuestion.correct === idx;
+                    
+                    let borderClass = "";
+                    if (isReviewMode) {
+                      if (isCorrect) borderClass = "border-green-500 bg-green-50 text-green-700 ring-2 ring-green-500";
+                      else if (isSelected && !isCorrect) borderClass = "border-red-500 bg-red-50 text-red-700";
                     }
 
                     return (
                       <Button
-                        key={oi}
-                        variant="outline"
-                        className={extraClass}
-                        disabled={submitted}
-                        onClick={() => setAnswers((prev) => ({ ...prev, [q.id]: oi }))}
+                        key={idx}
+                        variant={isSelected ? "default" : "outline"}
+                        disabled={isReviewMode}
+                        className={`h-auto min-h-[60px] py-4 px-6 justify-start text-left text-base transition-all duration-200 whitespace-normal break-words flex items-start gap-4 ${borderClass} ${
+                          !isReviewMode && isSelected 
+                          ? "ring-2 ring-primary ring-offset-2 scale-[1.01]" 
+                          : "hover:bg-primary/5"
+                        }`}
+                        onClick={() => handleOptionSelect(idx)}
                       >
-                        <span className="mr-3 h-5 w-5 flex items-center justify-center rounded-full border text-[10px] shrink-0">
-                          {String.fromCharCode(65 + oi)}
+                        <span className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 text-xs font-bold`}>
+                          {String.fromCharCode(65 + idx)}
                         </span>
-                        {opt}
+                        
+                        <span className="flex-1 leading-relaxed py-0.5">{option}</span>
+
+                        {isReviewMode && isCorrect && <CheckCircle2 className="mt-1 h-5 w-5 text-green-500 shrink-0" />}
+                        {isReviewMode && isSelected && !isCorrect && <XCircle className="mt-1 h-5 w-5 text-red-500 shrink-0" />}
                       </Button>
                     );
                   })}
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+            )}
           </motion.div>
-        ))}
+        </AnimatePresence>
       </div>
 
-      {!submitted && (
+      <div className="flex items-center justify-between pt-4 border-t border-border/50">
         <Button
-          onClick={handleSubmitQuiz}
-          className="gradient-primary text-primary-foreground w-full h-12 text-lg font-bold shadow-lg"
-          disabled={Object.keys(answers).length < questions.length || submittingScore}
+          variant="ghost"
+          onClick={handlePrev}
+          disabled={currentIndex === 0}
+          className="gap-2 text-muted-foreground hover:text-foreground"
         >
-          {submittingScore ? (
-            <Loader2 className="h-5 w-5 animate-spin mr-2" />
-          ) : null}
-          Submit Quiz ({Object.keys(answers).length}/{questions.length} answered)
+          <ChevronLeft className="h-5 w-5" /> Previous
         </Button>
-      )}
 
-      {submitted && !resultData && scoreCount < 7 && (
-        <Button 
-          variant="outline" 
-          className="w-full" 
-          disabled={submittingScore}
-          onClick={() => {
-            setAnswers({});
-            setSubmitted(false);
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-          }}
-        >
-          Retake Quiz
-        </Button>
-      )}
+        {currentIndex === questions.length - 1 && !isReviewMode ? (
+          <Button
+            onClick={handleSubmitQuiz}
+            disabled={Object.keys(answers).length < questions.length || submittingScore}
+            className="gradient-primary px-8 h-12 text-lg font-bold shadow-xl"
+          >
+            {submittingScore ? <Loader2 className="h-5 w-5 animate-spin mr-2" /> : <SendHorizontal className="h-5 w-5 mr-2" />}
+            Final Submit
+          </Button>
+        ) : (
+          <Button
+            variant="secondary"
+            onClick={handleNext}
+            disabled={currentIndex === questions.length - 1}
+            className="gap-2 bg-primary/10 text-primary hover:bg-primary/20"
+          >
+            Next <ChevronRight className="h-5 w-5" />
+          </Button>
+        )}
+      </div>
+
+      <div className="flex flex-wrap justify-center gap-2 mt-4">
+        {questions.map((q, i) => {
+          let dotClass = "w-2 bg-muted";
+          if (i === currentIndex) dotClass = "w-8 bg-primary shadow-md";
+          else if (isReviewMode) {
+             dotClass = answers[q.id] === q.correct ? "w-2 bg-green-500" : "w-2 bg-red-500";
+          } else if (answers[q.id] !== undefined) {
+             dotClass = "w-2 bg-primary/40";
+          }
+
+          return (
+            <button
+              key={i}
+              onClick={() => {
+                setDirection(i > currentIndex ? 1 : -1);
+                setCurrentIndex(i);
+              }}
+              className={`h-2 rounded-full transition-all duration-300 ${dotClass}`}
+            />
+          );
+        })}
+      </div>
     </div>
   );
 };
