@@ -25,10 +25,14 @@ const Navbar = () => {
           onClick={() => navigate("/dashboard")} 
           className="flex items-center gap-2 font-bold text-lg tracking-tight hover:opacity-80 transition-opacity"
         >
-          <div className="h-8 w-8 rounded-lg gradient-primary flex items-center justify-center">
-            <span className="text-primary-foreground text-sm font-extrabold">AI</span>
+          <div className="h-8 w-8 rounded-lg flex items-center justify-center">
+            <img 
+                src="/logo_img.png" 
+                alt="Logo" 
+                className="h-6 w-6 object-contain" 
+              />
           </div>
-          <span className="hidden sm:inline">InterviewPrep</span>
+          <span className="hidden sm:inline">Prepzen</span>
         </button>
 
         <div className="flex items-center gap-2">

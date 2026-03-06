@@ -1,237 +1,167 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
+import { vapi } from "@/utils/vapiHelper";
+import { useAuth } from "@/context/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Progress } from "@/components/ui/progress";
 import { motion, AnimatePresence } from "framer-motion";
-import { Mic, Square, Send, Clock, BarChart3 } from "lucide-react";
+import { Mic, PhoneOff, MessageSquare, Bot, User, Volume2 } from "lucide-react";
 
-const mockQuestion = "Explain the concept of closures in JavaScript. How do they work and when would you use them in a real-world application?";
-
-const mockEvaluation = {
-  technical: 82,
-  communication: 75,
-  confidence: 88,
-  reasoning: 70,
-  strengths: ["Clear explanation of scope chain", "Good real-world example usage"],
-  weaknesses: ["Could elaborate more on memory implications"],
-  feedback: "Strong understanding of closures demonstrated. Consider discussing garbage collection implications and performance considerations for a more comprehensive answer.",
-};
+interface TranscriptMessage {
+  role: "ai" | "user";
+  text: string;
+}
 
 const InterviewPage = () => {
-  const [recording, setRecording] = useState(false);
-  const [timeLeft, setTimeLeft] = useState(120);
-  const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
-  const [submitted, setSubmitted] = useState(false);
-  const [showEval, setShowEval] = useState(false);
-  const mediaRecorder = useRef<MediaRecorder | null>(null);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
-  const chunks = useRef<Blob[]>([]);
+  const { user } = useAuth();
+  const [isCalling, setIsCalling] = useState(false);
+  const [transcripts, setTranscripts] = useState<TranscriptMessage[]>([]);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Canvas for waveform
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const analyserRef = useRef<AnalyserNode | null>(null);
-  const animFrameRef = useRef<number>(0);
-
-  const drawWaveform = useCallback(() => {
-    const canvas = canvasRef.current;
-    const analyser = analyserRef.current;
-    if (!canvas || !analyser) return;
-    const ctx = canvas.getContext("2d")!;
-    const bufferLength = analyser.frequencyBinCount;
-    const dataArray = new Uint8Array(bufferLength);
-
-    const draw = () => {
-      animFrameRef.current = requestAnimationFrame(draw);
-      analyser.getByteTimeDomainData(dataArray);
-      ctx.fillStyle = "hsl(var(--muted))";
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.lineWidth = 2;
-      ctx.strokeStyle = "hsl(var(--primary))";
-      ctx.beginPath();
-      const sliceWidth = canvas.width / bufferLength;
-      let x = 0;
-      for (let i = 0; i < bufferLength; i++) {
-        const v = dataArray[i] / 128.0;
-        const y = (v * canvas.height) / 2;
-        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-        x += sliceWidth;
-      }
-      ctx.lineTo(canvas.width, canvas.height / 2);
-      ctx.stroke();
-    };
-    draw();
-  }, []);
-
-  const startRecording = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const audioCtx = new AudioContext();
-      const source = audioCtx.createMediaStreamSource(stream);
-      const analyser = audioCtx.createAnalyser();
-      analyser.fftSize = 2048;
-      source.connect(analyser);
-      analyserRef.current = analyser;
-
-      const recorder = new MediaRecorder(stream);
-      mediaRecorder.current = recorder;
-      chunks.current = [];
-      recorder.ondataavailable = (e) => chunks.current.push(e.data);
-      recorder.onstop = () => {
-        const blob = new Blob(chunks.current, { type: "audio/webm" });
-        setAudioBlob(blob);
-        stream.getTracks().forEach((t) => t.stop());
-        cancelAnimationFrame(animFrameRef.current);
-      };
-      recorder.start();
-      setRecording(true);
-      setTimeLeft(120);
-      drawWaveform();
-
-      timerRef.current = setInterval(() => {
-        setTimeLeft((prev) => {
-          if (prev <= 1) {
-            recorder.stop();
-            setRecording(false);
-            clearInterval(timerRef.current!);
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    } catch {
-      console.error("Microphone access denied");
+  // Auto-scroll transcript
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  };
+  }, [transcripts]);
 
-  const stopRecording = () => {
-    mediaRecorder.current?.stop();
-    setRecording(false);
-    if (timerRef.current) clearInterval(timerRef.current);
-  };
+  useEffect(() => {
+    vapi.on("call-start", () => setIsCalling(true));
+    vapi.on("call-end", () => setIsCalling(false));
+    
+    vapi.on("message", (message) => {
+      // We only care about the final transcripts for the UI log
+      if (message.type === "transcript" && message.transcriptType === "final") {
+        setTranscripts((prev) => [
+          ...prev,
+          { role: message.role === "assistant" ? "ai" : "user", text: message.transcript },
+        ]);
+      }
+    });
 
-  const handleSubmit = () => {
-    setSubmitted(true);
-    setTimeout(() => setShowEval(true), 1500);
-  };
-
-  useEffect(() => () => {
-    if (timerRef.current) clearInterval(timerRef.current);
-    cancelAnimationFrame(animFrameRef.current);
+    return () => { vapi.stop(); };
   }, []);
 
-  const formatTime = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, "0")}`;
-
-  const scoreItems = [
-    { label: "Technical", value: mockEvaluation.technical },
-    { label: "Communication", value: mockEvaluation.communication },
-    { label: "Confidence", value: mockEvaluation.confidence },
-    { label: "Reasoning", value: mockEvaluation.reasoning },
-  ];
+  const startTestInterview = async () => {
+  try {
+    await vapi.start({
+      model: {
+        provider: "openai",
+        model: "gpt-3.5-turbo", // Use 3.5 for faster testing
+        messages: [
+          { 
+            role: "system", 
+            content: "You are an interviewer. Greet the user and ask: What is Node.js?" 
+          }
+        ]
+      },
+      voice: {
+        provider: "openai",
+        voiceId: "alloy" // Standard OpenAI voice, usually works without extra setup
+      }
+    });
+  } catch (err) {
+    console.error("Vapi start error:", err);
+  }
+};
 
   return (
-    <div className="space-y-6 max-w-3xl">
-      <h1 className="text-2xl font-bold">AI Interview</h1>
+    <div className="max-w-5xl mx-auto p-4 md:p-8 space-y-8">
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-extrabold tracking-tight">Fullstack Interview</h1>
+          <p className="text-muted-foreground mt-1">Testing Vapi Voice Agent Integration</p>
+        </div>
+        {isCalling && (
+          <div className="flex items-center gap-3 px-4 py-2 bg-green-500/10 text-green-500 rounded-full border border-green-500/20">
+            <Volume2 className="h-4 w-4 animate-bounce" />
+            <span className="text-xs font-bold uppercase tracking-widest">Live</span>
+          </div>
+        )}
+      </div>
 
-      {/* Question */}
-      <Card className="shadow-card border-border/50">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base">Question</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm leading-relaxed">{mockQuestion}</p>
-        </CardContent>
-      </Card>
-
-      {/* Recording */}
-      {!showEval && (
-        <Card className="shadow-card border-border/50">
-          <CardContent className="p-6 space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-sm">
-                <Clock className="h-4 w-4 text-muted-foreground" />
-                <span className={`font-mono font-bold ${timeLeft < 30 ? "text-destructive" : ""}`}>{formatTime(timeLeft)}</span>
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        {/* Left: Interaction Controls */}
+        <div className="lg:col-span-4 space-y-6">
+          <Card className="overflow-hidden border-none shadow-xl bg-gradient-to-b from-card to-muted/20">
+            <CardContent className="p-8 flex flex-col items-center text-center space-y-6">
+              <div className="relative">
+                <AnimatePresence>
+                  {isCalling && (
+                    <motion.div
+                      initial={{ scale: 0.8, opacity: 0 }}
+                      animate={{ scale: 1.5, opacity: 0.15 }}
+                      exit={{ scale: 0.8, opacity: 0 }}
+                      transition={{ repeat: Infinity, duration: 2 }}
+                      className="absolute inset-0 bg-primary rounded-full"
+                    />
+                  )}
+                </AnimatePresence>
+                <div className={`relative h-32 w-32 rounded-full flex items-center justify-center border-4 transition-all duration-500 ${isCalling ? 'border-primary bg-primary/10' : 'border-muted bg-muted/50'}`}>
+                  <Bot className={`h-16 w-16 ${isCalling ? 'text-primary' : 'text-muted-foreground'}`} />
+                </div>
               </div>
-              {recording && <span className="flex items-center gap-1.5 text-xs text-destructive font-medium"><span className="h-2 w-2 rounded-full bg-destructive animate-pulse" /> Recording</span>}
-            </div>
 
-            <canvas ref={canvasRef} width={600} height={80} className="w-full h-20 rounded-lg bg-muted" />
+              <div>
+                <h2 className="text-xl font-bold">{isCalling ? "Gemini is Speaking" : "Start Interview"}</h2>
+                <p className="text-sm text-muted-foreground mt-2 px-4">
+                  Ensure your microphone is connected and you are in a quiet environment.
+                </p>
+              </div>
 
-            <div className="flex items-center gap-3">
-              {!recording && !audioBlob && (
-                <Button onClick={startRecording} className="gradient-primary text-primary-foreground">
-                  <Mic className="h-4 w-4 mr-2" /> Start Recording
+              {!isCalling ? (
+                <Button onClick={startTestInterview} size="lg" className="w-full h-14 text-lg font-bold shadow-lg gradient-primary">
+                  <Mic className="mr-2 h-5 w-5" /> Start Session
+                </Button>
+              ) : (
+                <Button onClick={() => vapi.stop()} size="lg" variant="destructive" className="w-full h-14 text-lg font-bold shadow-lg">
+                  <PhoneOff className="mr-2 h-5 w-5" /> End Interview
                 </Button>
               )}
-              {recording && (
-                <Button variant="destructive" onClick={stopRecording}>
-                  <Square className="h-4 w-4 mr-2" /> Stop
-                </Button>
-              )}
-              {audioBlob && !submitted && (
-                <>
-                  <Button variant="outline" onClick={() => { setAudioBlob(null); setTimeLeft(120); }}>Re-record</Button>
-                  <Button onClick={handleSubmit} className="gradient-primary text-primary-foreground">
-                    <Send className="h-4 w-4 mr-2" /> Submit Answer
-                  </Button>
-                </>
-              )}
-              {submitted && !showEval && (
-                <p className="text-sm text-muted-foreground animate-pulse">Evaluating your answer...</p>
-              )}
-            </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Right: Real-time Transcript */}
+        <Card className="lg:col-span-8 flex flex-col h-[550px] shadow-xl border-border/40">
+          <CardHeader className="border-b px-6 py-4 bg-muted/10">
+            <CardTitle className="text-lg flex items-center gap-2">
+              <MessageSquare className="h-5 w-5 text-primary" /> Live Transcription
+            </CardTitle>
+          </CardHeader>
+          <CardContent 
+            ref={scrollRef} 
+            className="flex-1 overflow-y-auto p-6 space-y-6 scrollbar-thin scrollbar-thumb-muted"
+          >
+            <AnimatePresence>
+              {transcripts.map((msg, i) => (
+                <motion.div
+                  key={i}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className={`flex items-start gap-4 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}
+                >
+                  <div className={`h-8 w-8 rounded-full flex items-center justify-center shrink-0 ${msg.role === 'ai' ? 'bg-primary/20 text-primary' : 'bg-muted text-muted-foreground'}`}>
+                    {msg.role === 'ai' ? <Bot className="h-4 w-4" /> : <User className="h-4 w-4" />}
+                  </div>
+                  <div className={`relative group p-4 rounded-2xl max-w-[85%] text-sm leading-relaxed shadow-sm ${
+                    msg.role === 'ai' 
+                      ? 'bg-card border border-border/50 rounded-tl-none' 
+                      : 'bg-primary text-primary-foreground rounded-tr-none'
+                  }`}>
+                    {msg.text}
+                  </div>
+                </motion.div>
+              ))}
+            </AnimatePresence>
+            {transcripts.length === 0 && !isCalling && (
+              <div className="h-full flex flex-col items-center justify-center text-muted-foreground space-y-2 opacity-50">
+                <MessageSquare className="h-12 w-12" />
+                <p className="italic">Waiting to start session...</p>
+              </div>
+            )}
           </CardContent>
         </Card>
-      )}
-
-      {/* Evaluation */}
-      <AnimatePresence>
-        {showEval && (
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
-            <Card className="shadow-card border-border/50">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <BarChart3 className="h-4 w-4 text-primary" /> Evaluation Scores
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {scoreItems.map((s) => (
-                  <div key={s.label} className="space-y-1">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">{s.label}</span>
-                      <span className="font-semibold">{s.value}%</span>
-                    </div>
-                    <Progress value={s.value} className="h-2" />
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Card className="shadow-card border-border/50">
-                <CardHeader className="pb-2"><CardTitle className="text-base text-success">Strengths</CardTitle></CardHeader>
-                <CardContent>
-                  <ul className="space-y-1">
-                    {mockEvaluation.strengths.map((s) => <li key={s} className="text-sm flex items-start gap-2"><span className="text-success mt-0.5">✓</span>{s}</li>)}
-                  </ul>
-                </CardContent>
-              </Card>
-              <Card className="shadow-card border-border/50">
-                <CardHeader className="pb-2"><CardTitle className="text-base text-destructive">Areas to Improve</CardTitle></CardHeader>
-                <CardContent>
-                  <ul className="space-y-1">
-                    {mockEvaluation.weaknesses.map((w) => <li key={w} className="text-sm flex items-start gap-2"><span className="text-destructive mt-0.5">✗</span>{w}</li>)}
-                  </ul>
-                </CardContent>
-              </Card>
-            </div>
-
-            <Card className="shadow-card border-border/50">
-              <CardHeader className="pb-2"><CardTitle className="text-base">Feedback</CardTitle></CardHeader>
-              <CardContent><p className="text-sm text-muted-foreground leading-relaxed">{mockEvaluation.feedback}</p></CardContent>
-            </Card>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      </div>
     </div>
   );
 };
