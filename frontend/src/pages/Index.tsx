@@ -35,8 +35,8 @@ const Index = () => {
           <span className="text-xl font-black tracking-tighter">Prepzen</span>
         </div>
         <div className="hidden md:flex gap-8 text-sm font-medium opacity-70">
-          <button onClick={() => scrollToSection('features')} className="hover:text-primary transition-colors">Features</button>
           <button onClick={() => scrollToSection('preview')} className="hover:text-primary transition-colors">Path Preview</button>
+          <button onClick={() => scrollToSection('features')} className="hover:text-primary transition-colors">Features</button>          
         </div>
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="icon" onClick={toggleTheme} className="rounded-full">
