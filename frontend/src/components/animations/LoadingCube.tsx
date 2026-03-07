@@ -1,137 +1,149 @@
+import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 
-const LoadingCube = () => {
-  // Define a consistent size for the loader container
-  const loaderSize = 64; // 64px, you can adjust this
+const BRAND_BLUE = "hsl(217, 91%, 50%)";
 
-  // The specific blue brand color
-  const BRAND_BLUE = "#6366f1"; 
+// Project a 3D point rotated around the Y axis onto 2D SVG space.
+// cx, cy = center of projection in SVG units
+// The cube is defined in local 3D coords, then rotated + projected.
+function projectY(
+  x: number,
+  y: number,
+  z: number,
+  angleRad: number,
+  cx: number,
+  cy: number,
+  scale: number
+): [number, number] {
+  // Rotate around Y axis
+  const rx = x * Math.cos(angleRad) - z * Math.sin(angleRad);
+  const rz = x * Math.sin(angleRad) + z * Math.cos(angleRad);
+  // Simple isometric-style projection (no perspective distortion so it stays centered)
+  const sx = cx + rx * scale;
+  const sy = cy + y * scale + rz * scale * 0.3; // slight Z contribution for depth feel
+  return [sx, sy];
+}
+
+// Cube half-size in local 3D units
+const H = 4.5;
+
+// 8 vertices of a cube centered at origin
+const VERTS: [number, number, number][] = [
+  [-H, -H, -H], // 0 back-top-left
+  [ H, -H, -H], // 1 back-top-right
+  [ H,  H, -H], // 2 back-bot-right
+  [-H,  H, -H], // 3 back-bot-left
+  [-H, -H,  H], // 4 front-top-left
+  [ H, -H,  H], // 5 front-top-right
+  [ H,  H,  H], // 6 front-bot-right
+  [-H,  H,  H], // 7 front-bot-left
+];
+
+// 12 edges (pairs of vertex indices)
+const EDGES: [number, number][] = [
+  // front face
+  [4,5],[5,6],[6,7],[7,4],
+  // back face
+  [0,1],[1,2],[2,3],[3,0],
+  // connecting
+  [0,4],[1,5],[2,6],[3,7],
+];
+
+export default function LoadingCube() {
+  const [angle, setAngle] = useState(0);
+  const rafRef = useRef<number>();
+  const startRef = useRef<number>();
+
+  useEffect(() => {
+    const duration = 3000; // ms per full rotation
+    const tick = (now: number) => {
+      if (!startRef.current) startRef.current = now;
+      const elapsed = now - startRef.current;
+      setAngle(((elapsed % duration) / duration) * Math.PI * 2);
+      rafRef.current = requestAnimationFrame(tick);
+    };
+    rafRef.current = requestAnimationFrame(tick);
+    return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
+  }, []);
+
+  // SVG center & projection scale
+  const CX = 12, CY = 12, SCALE = 0.95;
+
+  // Project all vertices
+  const pts = VERTS.map(([x, y, z]) => projectY(x, y, z, angle, CX, CY, SCALE));
+
+  // Build edge path strings
+  const edgePaths = EDGES.map(([a, b]) => {
+    const [ax, ay] = pts[a];
+    const [bx, by] = pts[b];
+    return `M${ax.toFixed(3)} ${ay.toFixed(3)} L${bx.toFixed(3)} ${by.toFixed(3)}`;
+  });
+
+  // Corners: all animate in perfect sync (same transition, delay: 0)
+  const cornerTransition = {
+    duration: 1.5,
+    repeat: Infinity,
+    ease: "easeInOut" as const,
+    delay: 0,
+  };
 
   return (
-    <div 
-      className="flex items-center justify-center relative overflow-hidden" 
-      style={{ 
-        width: `${loaderSize}px`, 
-        height: `${loaderSize}px`,
-        // Essential for proper centered 3D spin perception
-        perspective: "1000px" 
-      }}
+    <div
+      className="flex items-center justify-center relative"
+      style={{ width: 64, height: 64 }}
     >
-      <svg 
-        viewBox="0 0 24 24" 
-        fill="none" 
-        xmlns="http://www.w3.org/2000/svg" 
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        xmlns="http://www.w3.org/2000/svg"
         className="w-full h-full"
       >
-        {/*
-          Outer Round Corners (Square Markers)
-          All colors set to BRAND_BLUE
-          Action: Enlarge and Squeeze (Scale)
-        */}
-        <motion.path 
-          d="M2 9V7C2 4.23858 4.23858 2 7 2H9" 
-          stroke={BRAND_BLUE}
-          strokeWidth="2" 
-          strokeLinecap="round"
-          initial={{ scale: 1, opacity: 0.5 }}
-          animate={{
-            scale: [1, 1.15, 1],
-            opacity: [0.5, 1, 0.5]
-          }}
-          transition={{
-            duration: 1.5,
-            repeat: Infinity,
-            ease: "easeInOut"
-          }}
-          style={{ originX: "2px", originY: "9px" }}
+        {/* Top-left corner */}
+        <motion.path
+          d="M2 9V7C2 4.23858 4.23858 2 7 2H9"
+          stroke={BRAND_BLUE} strokeWidth="2" strokeLinecap="round"
+          animate={{ scale: [1, 1.15, 1], opacity: [0.55, 1, 0.55] }}
+          transition={cornerTransition}
+          style={{ originX: "5.5px", originY: "5.5px" }}
         />
-        <motion.path 
-          d="M15 2H17C19.7614 2 22 4.23858 22 7V9" 
-          stroke={BRAND_BLUE}
-          strokeWidth="2" 
-          strokeLinecap="round"
-          initial={{ scale: 1, opacity: 0.5 }}
-          animate={{
-            scale: [1, 1.15, 1],
-            opacity: [0.5, 1, 0.5]
-          }}
-          transition={{
-            duration: 1.5,
-            repeat: Infinity,
-            ease: "easeInOut",
-            delay: 0.2 // subtle staggered effect
-          }}
-          style={{ originX: "22px", originY: "2px" }}
+        {/* Top-right corner */}
+        <motion.path
+          d="M15 2H17C19.7614 2 22 4.23858 22 7V9"
+          stroke={BRAND_BLUE} strokeWidth="2" strokeLinecap="round"
+          animate={{ scale: [1, 1.15, 1], opacity: [0.55, 1, 0.55] }}
+          transition={cornerTransition}
+          style={{ originX: "18.5px", originY: "5.5px" }}
         />
-        <motion.path 
-          d="M22 15V17C22 19.7614 19.7614 22 17 22H15" 
-          stroke={BRAND_BLUE}
-          strokeWidth="2" 
-          strokeLinecap="round"
-          initial={{ scale: 1, opacity: 0.5 }}
-          animate={{
-            scale: [1, 1.15, 1],
-            opacity: [0.5, 1, 0.5]
-          }}
-          transition={{
-            duration: 1.5,
-            repeat: Infinity,
-            ease: "easeInOut",
-            delay: 0.4
-          }}
-          style={{ originX: "22px", originY: "22px" }}
+        {/* Bottom-right corner */}
+        <motion.path
+          d="M22 15V17C22 19.7614 19.7614 22 17 22H15"
+          stroke={BRAND_BLUE} strokeWidth="2" strokeLinecap="round"
+          animate={{ scale: [1, 1.15, 1], opacity: [0.55, 1, 0.55] }}
+          transition={cornerTransition}
+          style={{ originX: "18.5px", originY: "18.5px" }}
         />
-        <motion.path 
-          d="M9 22H7C4.23858 22 2 19.7614 2 17V15" 
-          stroke={BRAND_BLUE}
-          strokeWidth="2" 
-          strokeLinecap="round"
-          initial={{ scale: 1, opacity: 0.5 }}
-          animate={{
-            scale: [1, 1.15, 1],
-            opacity: [0.5, 1, 0.5]
-          }}
-          transition={{
-            duration: 1.5,
-            repeat: Infinity,
-            ease: "easeInOut",
-            delay: 0.6
-          }}
-          style={{ originX: "2px", originY: "22px" }}
+        {/* Bottom-left corner */}
+        <motion.path
+          d="M9 22H7C4.23858 22 2 19.7614 2 17V15"
+          stroke={BRAND_BLUE} strokeWidth="2" strokeLinecap="round"
+          animate={{ scale: [1, 1.15, 1], opacity: [0.55, 1, 0.55] }}
+          transition={cornerTransition}
+          style={{ originX: "5.5px", originY: "18.5px" }}
         />
 
-        {/* Inner 3D Cube
-          All colors set to BRAND_BLUE
-          Action: Central 3D Spin (RotateY)
-        */}
-        <motion.g
-          initial={{ rotateY: 0 }}
-          animate={{
-            // Smooth constant rotation for a precise spin
-            rotateY: 360,
-          }}
-          transition={{
-            duration: 3,
-            repeat: Infinity,
-            ease: "linear"
-          }}
-          style={{ 
-            originX: "12px", // Dead center of viewBox
-            originY: "12px", // Dead center of viewBox
-            transformStyle: "preserve-3d", // Required for 3D rotation within group
-            display: "inline-block" // Essential for origin clamping
-          }}
-        >
-          {/* Front Face */}
-          <path d="M12 6.5L16.5 9V14L12 16.5L7.5 14V9L12 6.5Z" stroke={BRAND_BLUE} strokeWidth="1.5" strokeLinejoin="round"/>
-          {/* Top Face lines */}
-          <path d="M7.5 9L12 11.5L16.5 9" stroke={BRAND_BLUE} strokeWidth="1.5" strokeLinejoin="round"/>
-          {/* Vertical line from top vertex */}
-          <path d="M12 11.5V16.5" stroke={BRAND_BLUE} strokeWidth="1.5" strokeLinejoin="round"/>
-        </motion.g>
+        {/* Wireframe cube — edges drawn from mathematically projected vertices */}
+        {edgePaths.map((d, i) => (
+          <path
+            key={i}
+            d={d}
+            stroke={BRAND_BLUE}
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            fill="none"
+          />
+        ))}
       </svg>
     </div>
   );
-};
-
-export default LoadingCube;
+}
