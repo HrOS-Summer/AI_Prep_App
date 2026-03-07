@@ -85,27 +85,50 @@ const AdminDashboard = () => {
     ];
   }, [selectedDomain, domainUsers, dashboardData]);
 
-  // Optimized Search and Sort
-  const filteredStudents = useMemo(() => {
-    if (!domainUsers) return [];
+  // 1. Fetch ALL Students (Default View)
+const { data: allStudents, isLoading: isAllLoading } = useQuery({
+  queryKey: ["allStudents"],
+  queryFn: async () => {
+    const res = await fetch("https://prepzen-api.onrender.com/admin/all-students");
+    if (!res.ok) throw new Error();
+    return res.json();
+  }
+});
+
+// 2. Optimized Table Data (Switches between All and Domain)
+const filteredStudents = useMemo(() => {
+  // Use domainUsers if a domain is selected, otherwise use allStudents list
+  const baseList = selectedDomain ? (domainUsers || []) : (allStudents || []);
+  
+  let result = baseList.filter((s: any) => {
+    const matchesSearch = 
+      s.username?.toLowerCase().includes(debouncedSearch.toLowerCase()) || 
+      s.employee_id?.includes(debouncedSearch);
     
-    let result = domainUsers.filter((s: any) => {
-      const matchesSearch = 
-        s.username?.toLowerCase().includes(debouncedSearch.toLowerCase()) || 
-        s.employee_id?.includes(debouncedSearch);
-      
-      const isNotAdmin = s.role !== "admin"; // Explicitly exclude admins
+    const isNotAdmin = s.role !== "admin"; 
 
-      return matchesSearch && isNotAdmin;
-    });
+    return matchesSearch && isNotAdmin;
+  });
 
-    // Sort by path_progress
-    return result.sort((a: any, b: any) => {
-      return sortOrder === 'asc' 
-        ? (a.path_progress || 0) - (b.path_progress || 0)
-        : (b.path_progress || 0) - (a.path_progress || 0);
-    });
-  }, [domainUsers, debouncedSearch, sortOrder]);
+  return result.sort((a: any, b: any) => {
+    return sortOrder === 'asc' 
+      ? (a.path_progress || 0) - (b.path_progress || 0)
+      : (b.path_progress || 0) - (a.path_progress || 0);
+  });
+}, [selectedDomain, domainUsers, allStudents, debouncedSearch, sortOrder]);
+
+// 3. Dynamic Critical Alerts Filtering
+const filteredAlerts = useMemo(() => {
+  const alerts = dashboardData?.underperforming_students || [];
+  
+  // If no domain is selected, show all alerts
+  if (!selectedDomain) return alerts;
+
+  // If a domain is selected, only show alerts for students in THAT domain
+  return alerts.filter((alert: any) => 
+    domainUsers?.some((user: any) => user.employee_id === alert.employee_id)
+  );
+}, [selectedDomain, dashboardData, domainUsers]);
 
   const handleBarClick = (data: any) => {
     if (data && data._id) {
