@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback } from "react";
+import React, { createContext, useContext, useState, useCallback, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
 export type UserRole = "student" | "admin";
@@ -14,6 +14,7 @@ export interface User {
 interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
+  loading: boolean;
   login: (employee_id: string, password: string, role: UserRole) => Promise<void>;
   signup: (username: string, email: string, password: string, employee_id: string) => Promise<void>;
   logout: () => void;
@@ -23,23 +24,31 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // Initialize QueryClient to allow cache invalidation on logout
   const queryClient = useQueryClient();
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  // Safe initialization from localStorage
-  const [user, setUser] = useState<User | null>(() => {
-    try {
-      const stored = localStorage.getItem("ai_interview_user");
-      if (!stored || stored === "undefined" || stored === "null") {
-        return null;
+  useEffect(() => {
+    const initializeAuth = () => {
+      try {
+        const stored = localStorage.getItem("ai_interview_user");
+        // Ensure we don't parse "null" strings as objects
+        if (stored && stored !== "undefined" && stored !== "null") {
+          const parsedUser = JSON.parse(stored);
+          if (parsedUser && parsedUser.employee_id) {
+            setUser(parsedUser);
+          }
+        }
+      } catch (error) {
+        console.error("Local storage parse error:", error);
+        localStorage.removeItem("ai_interview_user");
+      } finally {
+        setLoading(false);
       }
-      return JSON.parse(stored);
-    } catch (error) {
-      console.error("Local storage parse error:", error);
-      localStorage.removeItem("ai_interview_user");
-      return null;
-    }
-  });
+    };
+
+    initializeAuth();
+  }, []);
 
   const login = useCallback(async (employee_id: string, password: string, role: UserRole) => {
     try {
@@ -50,13 +59,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
 
       const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.detail || data.message || "Login failed");
-      }
+      if (!response.ok) throw new Error(data.detail || data.message || "Login failed");
 
       const { access_token, user: loggedInUser } = data;
-
       if (loggedInUser && access_token) {
         setUser(loggedInUser);
         localStorage.setItem("ai_interview_user", JSON.stringify(loggedInUser));
@@ -81,13 +86,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
 
       const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.detail || data.message || "Signup failed");
-      }
+      if (!response.ok) throw new Error(data.detail || data.message || "Signup failed");
 
       const { access_token, user: newUser } = data;
-
       if (newUser && access_token) {
         setUser(newUser); 
         localStorage.setItem("ai_interview_user", JSON.stringify(newUser));
@@ -100,36 +101,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const logout = useCallback(() => {
-    // 1. Wipe the UI State
     setUser(null);
-    
-    // 2. Clear all React Query caches (Learning Path, Scores, etc.)
     queryClient.clear();
-    
-    // 3. Clear browser persistence
     localStorage.removeItem("ai_interview_user");
     localStorage.removeItem("access_token");
-    
-    // Note: If you used any path_cache keys manually before, 
-    // queryClient.clear() handles the in-memory part, but we've 
-    // cleaned the major storage here.
   }, [queryClient]);
 
   const selectDomain = useCallback(async (domain_name: string, domain_id: string) => {
-    let currentUser = user || JSON.parse(localStorage.getItem("ai_interview_user") || "null");
+    // MODIFICATION: Always check storage as a fallback for the most current data
+    const currentUser = user || JSON.parse(localStorage.getItem("ai_interview_user") || "null");
 
     if (!currentUser?.employee_id) {
-      console.error("Selection failed: employee_id is missing");
-      return;
+      throw new Error("Selection failed: User context is missing");
     }
 
     try {
       const token = localStorage.getItem("access_token");
       const headers: HeadersInit = { "Content-Type": "application/json" };
-      
-      if (token) {
-        headers["Authorization"] = `Bearer ${token}`;
-      }
+      if (token) headers["Authorization"] = `Bearer ${token}`;
 
       const response = await fetch(`https://prepzen-api.onrender.com/domain/update-user-domain`, {
         method: "POST",
@@ -148,8 +137,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const updatedUser = { ...currentUser, domain: domain_name };
       setUser(updatedUser);
       localStorage.setItem("ai_interview_user", JSON.stringify(updatedUser));
-      
-      // Invalidate query to ensure Learning Path updates for the new domain
       queryClient.invalidateQueries({ queryKey: ["learningPath"] });
       
     } catch (error) {
@@ -159,7 +146,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [user, queryClient]);
 
   return (
-    <AuthContext.Provider value={{ user, isAuthenticated: !!user, login, signup, logout, selectDomain }}>
+    <AuthContext.Provider 
+      value={{ 
+        user, 
+        isAuthenticated: !!user && !!user.employee_id, // Stronger check
+        loading, 
+        login, 
+        signup, 
+        logout, 
+        selectDomain 
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
