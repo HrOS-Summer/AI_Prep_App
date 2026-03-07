@@ -70,9 +70,7 @@ const Index = () => {
             <Button onClick={() => navigate("/signup")} size="lg" className="h-14 px-8 text-lg font-bold gradient-primary shadow-lg shadow-primary/20 group">
               Get Started <ArrowRight className="ml-2 group-hover:translate-x-1 transition-transform" />
             </Button>
-            <Button size="lg" variant="ghost" className="h-14 px-8 text-lg font-bold">
-               Watch Demo
-            </Button>
+            
           </div>
         </div>
       </section>
