@@ -26,9 +26,37 @@ interface Question {
   correct: number;
 }
 
+
+const domainFacts: Record<string, string[]> = {
+  "Web Development": [
+    "Did you know? The first ever website is still online at info.cern.ch.",
+    "Concept: Closures in JS allow functions to access variables from an outer scope even after it has closed.",
+    "Pro-tip: Semantic HTML improves SEO and accessibility for screen readers.",
+    "Quick Fact: React's Virtual DOM minimizes actual DOM manipulation to boost performance."
+  ],
+  "Java Full Stack": [
+    "Did you know? Java was originally named 'Oak' after a tree outside the creator's office.",
+    "Concept: JVM (Java Virtual Machine) allows Java to be 'Write Once, Run Anywhere'.",
+    "Concept: Spring Boot's 'Inversion of Control' handles object lifecycles for you.",
+    "Pro-tip: Always use PreparedStatements in JDBC to prevent SQL Injection attacks."
+  ],
+  "Quality Engineering and Assurance": [
+    "Quick Fact: The term 'bug' was coined when a real moth was found inside a Harvard Mark II computer.",
+    "Concept: Regression testing ensures that new changes haven't broken existing functionality.",
+    "Pro-tip: Boundary Value Analysis is a key black-box technique to find errors at input edges.",
+    "Did you know? Shift-Left testing means starting the testing process earlier in the development cycle."
+  ],
+  "General": [
+    "Stay focused: Take a deep breath before starting the assessment.",
+    "Tip: Read every option carefully; sometimes two answers seem correct, but one is more specific.",
+    "Fact: Interviewers value problem-solving logic as much as technical syntax."
+  ]
+};
+
 const QuizPage = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [factIndex, setFactIndex] = useState(0);
   
   const [questions, setQuestions] = useState<Question[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -75,6 +103,7 @@ const QuizPage = () => {
         return;
       }
 
+      
       try {
         const response = await fetch("https://prepzen-api.onrender.com/quiz/get-quiz", {
           method: "POST",
@@ -101,6 +130,17 @@ const QuizPage = () => {
     };
     initQuiz();
   }, [user?.employee_id]);
+
+  // 2. Fact Rotation Logic
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (loading) {
+      interval = setInterval(() => {
+        setFactIndex((prev) => (prev + 1) % (domainFacts[user?.domain || "General"]?.length || 3));
+      }, 4000); // Change fact every 4 seconds
+    }
+    return () => clearInterval(interval);
+  }, [loading, user?.domain]);
 
   useEffect(() => {
     if (user?.employee_id && Object.keys(answers).length > 0) {
@@ -158,14 +198,69 @@ const QuizPage = () => {
     }
   };
 
-  if (loading) return (
-    <div className="h-[70vh] flex flex-col items-center justify-center gap-4">
-      <Loader2 className="h-10 w-10 animate-spin text-primary" />
-      <p className="text-muted-foreground animate-pulse text-lg font-medium text-center px-4">
-        Preparing your assessment...
-      </p>
-    </div>
-  );
+  if (loading) {
+    const currentFacts = domainFacts[user?.domain || "General"] || domainFacts["General"];
+    
+    return (
+      <div className="h-[80vh] flex flex-col items-center justify-center p-6">
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="max-w-md w-full space-y-8 text-center"
+        >
+          {/* Animated Brain/Loading Icon */}
+          <div className="relative mx-auto w-24 h-24">
+            <Loader2 className="absolute inset-0 w-24 h-24 animate-spin text-primary/20" strokeWidth={1} />
+            <div className="absolute inset-0 flex items-center justify-center">
+              <motion.div
+                animate={{ scale: [1, 1.2, 1], opacity: [0.5, 1, 0.5] }}
+                transition={{ repeat: Infinity, duration: 2 }}
+              >
+                <Trophy className="w-10 h-10 text-primary" />
+              </motion.div>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <h2 className="text-2xl font-bold tracking-tight">Generating your Assessment</h2>
+            <div className="h-1 w-full bg-muted rounded-full overflow-hidden">
+              <motion.div 
+                className="h-full bg-primary"
+                animate={{ x: ["-100%", "100%"] }}
+                transition={{ repeat: Infinity, duration: 1.5, ease: "linear" }}
+              />
+            </div>
+          </div>
+
+          {/* Rotating Facts Card */}
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={factIndex}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.5 }}
+            >
+              <Card className="bg-primary/5 border-primary/10 shadow-none">
+                <CardContent className="p-6">
+                  <p className="text-sm text-primary font-bold mb-2 uppercase tracking-widest flex items-center justify-center gap-2">
+                    <CheckCircle2 className="w-4 h-4" /> Quick Insight
+                  </p>
+                  <p className="text-lg text-muted-foreground leading-relaxed italic">
+                    "{currentFacts[factIndex]}"
+                  </p>
+                </CardContent>
+              </Card>
+            </motion.div>
+          </AnimatePresence>
+
+          <p className="text-xs text-muted-foreground animate-pulse">
+            Our AI is fetching questions from Gemini. This might take up to 20 seconds on free-tier servers.
+          </p>
+        </motion.div>
+      </div>
+    );
+  }
 
   if (resultData && !isReviewMode) {
     const isPass = resultData.status === "pass";
