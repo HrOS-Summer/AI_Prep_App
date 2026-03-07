@@ -32,7 +32,7 @@ const Index = () => {
       <nav className="flex items-center justify-between px-6 py-6 max-w-7xl mx-auto sticky top-0 z-50 backdrop-blur-md border-b border-border/10">
         <div className="flex items-center gap-2">
           <img src="/logo_img.png" alt="Logo" className="h-8 w-8" />
-          <span className="text-xl font-black tracking-tighter uppercase italic">PrepZen</span>
+          <span className="text-xl font-black tracking-tighter">Prepzen</span>
         </div>
         <div className="hidden md:flex gap-8 text-sm font-medium opacity-70">
           <button onClick={() => scrollToSection('features')} className="hover:text-primary transition-colors">Features</button>
@@ -126,7 +126,7 @@ const Index = () => {
       </section>
 
       <footer className="py-12 text-center opacity-50 text-xs font-mono">
-        © 2026 PrepZen AI • Crafted for Growth
+        © 2026 Prepzen AI • Crafted for Growth
       </footer>
     </div>
   );
