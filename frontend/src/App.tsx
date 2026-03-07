@@ -4,7 +4,6 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
-import { ThemeProvider } from "@/context/ThemeContext"; // Ensure correct path
 import AppLayout from "@/components/AppLayout";
 import Index from "./pages/Index";
 import LoginPage from "./pages/LoginPage";
@@ -22,60 +21,94 @@ import LoadingCube from "@/components/animations/LoadingCube";
 
 const queryClient = new QueryClient();
 
+/**
+ * Smart Dashboard Redirector
+ * Ensures admins go to /admin and students go to /dashboard
+ */
+const DashboardRedirect = () => {
+  const { user, loading } = useAuth();
+  if (loading) return <LoadingCube />;
+  
+  if (user?.role === "admin") return <Navigate to="/admin" replace />;
+  return <StudentDashboard />; // Students see the standard dashboard
+};
+
+/**
+ * Guard: Only Guests (Unauthenticated)
+ */
 const GuestOnlyRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, loading } = useAuth();
-  if (loading) return <div className="h-screen flex items-center justify-center bg-background"><LoadingCube /></div>;
-  if (user && user.employee_id) return <Navigate to="/dashboard" replace />;
+  if (loading) return <LoadingCube />;
+  if (user && user.employee_id) {
+    return <Navigate to={user.role === "admin" ? "/admin" : "/dashboard"} replace />;
+  }
   return <>{children}</>;
 };
 
+/**
+ * Guard: Any Logged In User
+ */
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, loading } = useAuth();
-  if (loading) return <div className="h-screen flex items-center justify-center bg-background"><LoadingCube /></div>;
+  if (loading) return <LoadingCube />;
   if (!user || !user.employee_id) return <Navigate to="/login" replace />;
   return <>{children}</>;
 };
 
-const AdminRoute = ({ children }: { children: React.ReactNode }) => {
+/**
+ * Guard: Admin Only
+ */
+const AdminOnlyRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, loading } = useAuth();
-  if (loading) return <div className="h-screen flex items-center justify-center bg-background"><LoadingCube /></div>;
+  if (loading) return <LoadingCube />;
   if (user?.role !== "admin") return <Navigate to="/dashboard" replace />;
+  return <>{children}</>;
+};
+
+/**
+ * Guard: Student Only (Prevents Admins from seeing Learning Path)
+ */
+const StudentOnlyRoute = ({ children }: { children: React.ReactNode }) => {
+  const { user, loading } = useAuth();
+  if (loading) return <LoadingCube />;
+  if (user?.role !== "student") return <Navigate to="/admin" replace />;
   return <>{children}</>;
 };
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    {/* ThemeProvider must be at the very top to affect all components */}
-    <ThemeProvider>
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <AuthProvider>
-          <BrowserRouter>
-            <Routes>
-              {/* Landing page is accessible to everyone */}
-              <Route path="/" element={<Index />} />
+    <TooltipProvider>
+      <Toaster />
+      <Sonner />
+      <AuthProvider>
+        <BrowserRouter>
+          <Routes>
+            <Route path="/" element={<Index />} />
+            <Route path="/login" element={<GuestOnlyRoute><LoginPage /></GuestOnlyRoute>} />
+            <Route path="/signup" element={<GuestOnlyRoute><SignupPage /></GuestOnlyRoute>} />
 
-              <Route path="/login" element={<GuestOnlyRoute><LoginPage /></GuestOnlyRoute>} />
-              <Route path="/signup" element={<GuestOnlyRoute><SignupPage /></GuestOnlyRoute>} />
+            <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
+              {/* Intelligent Dashboard Route */}
+              <Route path="/dashboard" element={<DashboardRedirect />} />
 
-              <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
-                <Route path="/domain-selection" element={<DomainSelection />} />
-                <Route path="/dashboard" element={<StudentDashboard />} />
-                <Route path="/learning-path" element={<LearningPath />} />
-                <Route path="/interview" element={<InterviewPage />} />
-                <Route path="/quiz" element={<QuizPage />} />
-                <Route path="/report-cards" element={<ReportCards />} />
-                <Route path="/admin" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
-                <Route path="/admin/students/:id" element={<AdminRoute><StudentDetails /></AdminRoute>} />
-              </Route>
+              {/* Student Specific Routes */}
+              <Route path="/learning-path" element={<StudentOnlyRoute><LearningPath /></StudentOnlyRoute>} />
+              <Route path="/interview" element={<StudentOnlyRoute><InterviewPage /></StudentOnlyRoute>} />
+              <Route path="/quiz" element={<StudentOnlyRoute><QuizPage /></StudentOnlyRoute>} />
+              <Route path="/report-cards" element={<StudentOnlyRoute><ReportCards /></StudentOnlyRoute>} />
+              <Route path="/domain-selection" element={<StudentOnlyRoute><DomainSelection /></StudentOnlyRoute>} />
+              
+              {/* Admin Specific Routes */}
+              <Route path="/admin" element={<AdminOnlyRoute><AdminDashboard /></AdminOnlyRoute>} />
+              <Route path="/admin/students" element={<AdminOnlyRoute><AdminDashboard /></AdminOnlyRoute>} />
+              <Route path="/admin/students/:id" element={<AdminOnlyRoute><StudentDetails /></AdminOnlyRoute>} />
+            </Route>
 
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </BrowserRouter>
-        </AuthProvider>
-      </TooltipProvider>
-    </ThemeProvider>
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </BrowserRouter>
+      </AuthProvider>
+    </TooltipProvider>
   </QueryClientProvider>
 );
 
