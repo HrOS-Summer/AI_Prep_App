@@ -29,7 +29,7 @@ const AdminDashboard = () => {
     }
   });
 
-  // 2. ALL Students (Initial Default View)
+  // 2. ALL Students (Default View)
   const { data: allStudents, isLoading: isAllStudentsLoading } = useQuery({
     queryKey: ["allStudents"],
     queryFn: async () => {
@@ -39,7 +39,7 @@ const AdminDashboard = () => {
     }
   });
 
-  // 3. Domain-Specific Users (Filtered View)
+  // 3. Domain-Specific Users
   const { data: domainUsers, isLoading: isDomainUsersLoading } = useQuery({
     queryKey: ["domainUsers", selectedDomain?.id],
     queryFn: async () => {
@@ -78,17 +78,14 @@ const AdminDashboard = () => {
     ];
   }, [selectedDomain, domainUsers, dashboardData]);
 
-  // Optimized Table Data with ID-to-Name replacement
   const filteredStudents = useMemo(() => {
     const baseList = selectedDomain ? (domainUsers || []) : (allStudents || []);
-    
     let result = baseList.filter((s: any) => {
       const matchesSearch = 
         s.username?.toLowerCase().includes(debouncedSearch.toLowerCase()) || 
         s.employee_id?.includes(debouncedSearch);
       return matchesSearch && s.role !== "admin"; 
     });
-
     return result.sort((a: any, b: any) => {
       return sortOrder === 'asc' 
         ? (a.path_progress || 0) - (b.path_progress || 0)
@@ -96,9 +93,12 @@ const AdminDashboard = () => {
     });
   }, [selectedDomain, domainUsers, allStudents, debouncedSearch, sortOrder]);
 
+  // Updated Filter logic for Critical Alerts to follow domain selection
   const filteredAlerts = useMemo(() => {
     const alerts = dashboardData?.underperforming_students || [];
     if (!selectedDomain) return alerts;
+    
+    // Cross-reference alerts with domain users to filter by domain
     return alerts.filter((alert: any) => 
       domainUsers?.some((user: any) => user.employee_id === alert.employee_id)
     );
@@ -172,22 +172,25 @@ const AdminDashboard = () => {
           </CardContent>
         </Card>
 
-        <Card className="border-border/50 shadow-lg">
+        {/* Updated Critical Alerts Section with fixed title and scrolling */}
+        <Card className="border-border/50 shadow-lg flex flex-col">
           <CardHeader>
-            <CardTitle className="text-lg">{selectedDomain ? `${selectedDomain.name} Alerts` : "Critical Alerts"}</CardTitle>
+            <CardTitle className="text-lg">Critical Alerts</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
-             {filteredAlerts.length > 0 ? filteredAlerts.map((s: any) => (
-               <div key={s._id} className="flex items-center justify-between p-3 rounded-lg bg-destructive/5 border border-destructive/10">
-                 <div>
-                   <p className="text-sm font-bold">{s.username}</p>
-                   <p className="text-xs text-muted-foreground">Score: {s.score}% • {s.status.toUpperCase()}</p>
-                 </div>
-                 <Button variant="ghost" size="sm" onClick={() => navigate(`/admin/students/${s.employee_id}`)}>Review</Button>
-               </div>
-             )) : (
-               <p className="text-center text-sm text-muted-foreground py-10 italic">No alerts for this domain.</p>
-             )}
+          <CardContent className="p-0 flex-1">
+            <div className="overflow-y-auto max-h-[300px] px-6 pb-6 space-y-4 custom-scrollbar">
+              {filteredAlerts.length > 0 ? filteredAlerts.map((s: any) => (
+                <div key={s._id} className="flex items-center justify-between p-3 rounded-lg bg-destructive/5 border border-destructive/10">
+                  <div>
+                    <p className="text-sm font-bold">{s.username}</p>
+                    <p className="text-xs text-muted-foreground">Score: {s.score}% • {s.status.toUpperCase()}</p>
+                  </div>
+                  <Button variant="ghost" size="sm" onClick={() => navigate(`/admin/students/${s.employee_id}`)}>Review</Button>
+                </div>
+              )) : (
+                <p className="text-center text-sm text-muted-foreground py-10 italic">No alerts found.</p>
+              )}
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -241,7 +244,6 @@ const AdminDashboard = () => {
                       <td className="p-4 text-muted-foreground font-mono text-xs">{s.employee_id}</td>
                       <td className="p-4">
                         <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-secondary text-secondary-foreground border border-border">
-                          {/* Logic to handle Domain ID vs Domain Name */}
                           {selectedDomain ? selectedDomain.name : (s.domain || "N/A")}
                         </span>
                       </td>
