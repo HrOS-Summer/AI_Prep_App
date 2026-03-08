@@ -1,14 +1,12 @@
 import {
   LayoutDashboard,
   Route,
-  Mic,
   HelpCircle,
   FileText,
   Users,
   UserCheck,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
-import { useLocation } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import {
   Sidebar,
@@ -22,10 +20,10 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 
+// Updated: Removed Interview item
 const studentItems = [
   { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
   { title: "Learning Path", url: "/learning-path", icon: Route },
-  { title: "Interview", url: "/interview", icon: Mic },
   { title: "Quiz", url: "/quiz", icon: HelpCircle },
   { title: "Report Cards", url: "/report-cards", icon: FileText },
 ];
@@ -38,7 +36,6 @@ const adminItems = [
 export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
-  const location = useLocation();
   const { user } = useAuth();
 
   const items = user?.role === "admin" ? adminItems : studentItems;

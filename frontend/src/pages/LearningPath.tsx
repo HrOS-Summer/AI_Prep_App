@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
-import { Lock, CheckCircle2, Play, ExternalLink, Loader2, Trophy, BookOpen, AlertCircle } from "lucide-react";
+import { Lock, CheckCircle2, Mic, Loader2, Trophy, BookOpen, AlertCircle } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { Progress } from "@/components/ui/progress";
@@ -11,23 +11,18 @@ const LearningPath = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
 
-  // Pull employeeId and token directly from persistent storage or context
+  // Pull employeeId from persistent storage or context
   const storedUser = JSON.parse(localStorage.getItem("ai_interview_user") || "{}");
   const employeeId = user?.employee_id || storedUser?.employee_id;
-  const token = localStorage.getItem("access_token");
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["learningPath", employeeId],
     queryFn: async () => {
       if (!employeeId) throw new Error("No Employee ID found");
 
-      console.log(employeeId);
       const response = await fetch("https://prepzen-api.onrender.com/learning/get-path", {
         method: "POST",
-        headers: { 
-          "Content-Type": "application/json",
-          // ...(token && { "Authorization": `Bearer ${token}` })
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ employee_id: String(employeeId) }),
       });
       
@@ -55,7 +50,7 @@ const LearningPath = () => {
       <AlertCircle className="h-12 w-12 text-destructive mx-auto" />
       <h2 className="text-lg font-bold text-destructive">Connection Issue</h2>
       <p className="text-sm text-muted-foreground">
-        We couldn't reach the learning path. Please verify the backend router prefix is set to <code>/learning</code>.
+        We couldn't reach your learning path. Please try again or contact support.
       </p>
       <Button variant="outline" onClick={() => window.location.reload()}>Retry Connection</Button>
     </div>
@@ -101,7 +96,12 @@ const LearningPath = () => {
           const isLocked = assignment.status === "disabled";
 
           return (
-            <motion.div key={assignment.assignment_id} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.05 }}>
+            <motion.div 
+              key={assignment.assignment_id} 
+              initial={{ opacity: 0, x: -10 }} 
+              animate={{ opacity: 1, x: 0 }} 
+              transition={{ delay: i * 0.05 }}
+            >
               <Card className={`relative transition-all border-l-4 ${
                 isDone ? "border-l-success" : isActive ? "border-l-primary shadow-md" : "border-l-muted opacity-60"
               }`}>
@@ -119,7 +119,11 @@ const LearningPath = () => {
                       <p className="text-sm text-muted-foreground line-clamp-2 leading-relaxed">{assignment.curriculum}</p>
                       <div className="flex flex-wrap gap-2 mt-3">
                         {assignment.links.map((link: string, idx: number) => (
-                          <a key={idx} href={link} target="_blank" rel="noreferrer"
+                          <a 
+                            key={idx} 
+                            href={link} 
+                            target="_blank" 
+                            rel="noreferrer"
                             className="text-[11px] flex items-center gap-1 px-3 py-1.5 rounded-md bg-accent/50 hover:bg-accent border border-transparent hover:border-accent-foreground/10 transition-colors"
                           >
                             <BookOpen className="h-3 w-3" /> Resource {idx + 1}
@@ -132,10 +136,16 @@ const LearningPath = () => {
                   <div className="shrink-0">
                     {isActive ? (
                       <Button 
-                        onClick={() => navigate("/quiz")} 
+                        onClick={() => navigate("/interview", { 
+                          state: { 
+                            title: assignment.title, 
+                            topics: assignment.curriculum,
+                            assignmentId: assignment.assignment_id 
+                          } 
+                        })} 
                         className="gradient-primary text-primary-foreground font-bold px-8 shadow-lg hover:scale-105 transition-transform"
                       >
-                        <Play className="h-4 w-4 mr-2" /> Start Quiz
+                        <Mic className="h-4 w-4 mr-2" /> Start Interview
                       </Button>
                     ) : isDone ? (
                       <div className="text-right bg-success/5 p-2 rounded-lg border border-success/10">

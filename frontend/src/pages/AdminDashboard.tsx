@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   Users, BookOpen, Mic, HelpCircle, Search, 
-  RotateCcw, Loader2, ArrowUp, ArrowDown 
+  RotateCcw, Loader2, ArrowUp, ArrowDown, Star, AlertCircle,
 } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { useNavigate } from "react-router-dom";
@@ -44,7 +44,8 @@ const AdminDashboard = () => {
     queryKey: ["domainUsers", selectedDomain?.id],
     queryFn: async () => {
       if (!selectedDomain?.id) return [];
-      const res = await fetch(`https://prepzen-api.onrender.com/admin/domain-users/${selectedDomain.id}`);
+      // FIXED: Properly encode the ID/Name to prevent 404s
+      const res = await fetch(`https://prepzen-api.onrender.com/admin/domain-users/${encodeURIComponent(selectedDomain.id)}`);
       if (!res.ok) throw new Error("Failed to fetch domain users");
       return res.json();
     },
@@ -65,16 +66,21 @@ const AdminDashboard = () => {
         { label: "High Performers", value: dashboardData?.high_performers_count || 0, icon: HelpCircle, color: "bg-green-500/10 text-green-600" },
       ];
     }
+    
+    // DYNAMIC DOMAIN STATS
     const totalInDomain = domainUsers.length;
     const avgProgress = totalInDomain > 0 
       ? Math.round(domainUsers.reduce((acc: number, curr: any) => acc + (curr.path_progress || 0), 0) / totalInDomain) 
       : 0;
     
+    // Count total interviews done in this domain specifically
+    const domainInterviews = domainUsers.reduce((acc: number, curr: any) => acc + (curr.total_interviews || 0), 0);
+    
     return [
       { label: `${selectedDomain.name} Candidates`, value: totalInDomain, icon: Users, color: "bg-blue-500/10 text-blue-600" },
       { label: "Avg Progress", value: `${avgProgress}%`, icon: BookOpen, color: "bg-purple-500/10 text-purple-600" },
-      { label: "Domain Interviews", value: "Syncing...", icon: Mic, color: "bg-orange-500/10 text-orange-600" },
-      { label: "Domain Standing", value: "Top Tier", icon: HelpCircle, color: "bg-green-500/10 text-green-600" },
+      { label: "Domain Interviews", value: domainInterviews, icon: Mic, color: "bg-orange-500/10 text-orange-600" },
+      { label: "Top Performer", value: domainUsers[0]?.username || "N/A", icon: Star, color: "bg-amber-500/10 text-amber-600" },
     ];
   }, [selectedDomain, domainUsers, dashboardData]);
 
@@ -93,12 +99,9 @@ const AdminDashboard = () => {
     });
   }, [selectedDomain, domainUsers, allStudents, debouncedSearch, sortOrder]);
 
-  // Updated Filter logic for Critical Alerts to follow domain selection
   const filteredAlerts = useMemo(() => {
     const alerts = dashboardData?.underperforming_students || [];
     if (!selectedDomain) return alerts;
-    
-    // Cross-reference alerts with domain users to filter by domain
     return alerts.filter((alert: any) => 
       domainUsers?.some((user: any) => user.employee_id === alert.employee_id)
     );
@@ -134,10 +137,11 @@ const AdminDashboard = () => {
         </div>
       </div>
 
+      {/* STATS GRID */}
       <AnimatePresence mode="wait">
-        <motion.div key={selectedDomain?.id || "global"} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <motion.div key={selectedDomain?.id || "global"} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {activeStats.map((s) => (
-            <Card key={s.label} className="border-border/50 bg-card/50 backdrop-blur-sm">
+            <Card key={s.label} className="border-border/50 bg-card/50 backdrop-blur-sm hover:border-primary/20 transition-colors">
               <CardContent className="p-6">
                 <div className="flex items-center justify-between">
                   <div className={`p-2 rounded-lg ${s.color}`}><s.icon className="h-5 w-5" /></div>
@@ -154,6 +158,7 @@ const AdminDashboard = () => {
       </AnimatePresence>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* CHART */}
         <Card className="lg:col-span-2 border-border/50 shadow-lg">
           <CardHeader><CardTitle className="text-lg">Domain Distribution</CardTitle></CardHeader>
           <CardContent className="h-[300px]">
@@ -172,97 +177,95 @@ const AdminDashboard = () => {
           </CardContent>
         </Card>
 
-        {/* Updated Critical Alerts Section with fixed title and scrolling */}
+        {/* ALERTS */}
         <Card className="border-border/50 shadow-lg flex flex-col">
-          <CardHeader>
-            <CardTitle className="text-lg">Critical Alerts</CardTitle>
+          <CardHeader className="border-b bg-muted/10">
+            <CardTitle className="text-lg flex items-center gap-2">
+              <AlertCircle className="h-4 w-4 text-destructive" /> Critical Alerts
+            </CardTitle>
           </CardHeader>
           <CardContent className="p-0 flex-1">
-            <div className="overflow-y-auto max-h-[300px] px-6 pb-6 space-y-4 custom-scrollbar">
+            <div className="overflow-y-auto max-h-[300px] p-4 space-y-3 custom-scrollbar">
               {filteredAlerts.length > 0 ? filteredAlerts.map((s: any) => (
-                <div key={s._id} className="flex items-center justify-between p-3 rounded-lg bg-destructive/5 border border-destructive/10">
+                <div key={s._id} className="flex items-center justify-between p-3 rounded-lg bg-destructive/5 border border-destructive/10 hover:bg-destructive/10 transition-colors">
                   <div>
                     <p className="text-sm font-bold">{s.username}</p>
-                    <p className="text-xs text-muted-foreground">Score: {s.score}% • {s.status.toUpperCase()}</p>
+                    <p className="text-[10px] text-muted-foreground uppercase font-semibold">Score: {s.score}% • {s.status}</p>
                   </div>
-                  <Button variant="ghost" size="sm" onClick={() => navigate(`/admin/students/${s.employee_id}`)}>Review</Button>
+                  <Button variant="ghost" size="sm" onClick={() => navigate(`/admin/students/${s.employee_id}`)} className="h-8 text-xs">Review</Button>
                 </div>
               )) : (
-                <p className="text-center text-sm text-muted-foreground py-10 italic">No alerts found.</p>
+                <div className="text-center py-10">
+                  <HelpCircle className="h-8 w-8 text-muted-foreground mx-auto opacity-20 mb-2" />
+                  <p className="text-sm text-muted-foreground italic">No candidates require immediate attention.</p>
+                </div>
               )}
             </div>
           </CardContent>
         </Card>
       </div>
 
+      {/* REGISTRY TABLE */}
       <Card className="border-border/50 overflow-hidden shadow-lg">
-        <CardHeader className="bg-muted/30 border-b flex flex-col md:flex-row md:items-center justify-between gap-4 py-4">
+        <CardHeader className="bg-muted/30 border-b flex flex-col md:flex-row md:items-center justify-between gap-4 py-4 px-6">
           <div>
             <CardTitle className="text-lg">{selectedDomain ? selectedDomain.name : "Platform"} Registry</CardTitle>
-            <p className="text-xs text-muted-foreground font-mono">Showing {filteredStudents.length} candidates</p>
+            <p className="text-xs text-muted-foreground font-mono">Total {filteredStudents.length} candidates found</p>
           </div>
-          <div className="flex items-center gap-3">
-            <div className="relative w-full md:w-64">
-              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input 
-                placeholder="Search candidates..." 
-                className="pl-9 bg-background h-9" 
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-            </div>
+          <div className="relative w-full md:w-64">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input 
+              placeholder="Search by name or ID..." 
+              className="pl-9 bg-background h-9 border-border/50 focus:ring-primary" 
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
           </div>
         </CardHeader>
         <CardContent className="p-0">
-          <div className="overflow-y-auto max-h-[400px] custom-scrollbar">
+          <div className="overflow-y-auto max-h-[450px] custom-scrollbar">
             {isDomainUsersLoading ? (
                <div className="p-20 text-center"><Loader2 className="animate-spin mx-auto text-primary" /></div>
             ) : (
-              <table className="w-full text-sm text-left">
-                <thead className="sticky top-0 bg-muted/95 backdrop-blur-sm z-10">
-                  <tr className="text-muted-foreground border-b uppercase text-[10px] font-bold tracking-wider">
+              <table className="w-full text-sm text-left border-collapse">
+                <thead className="sticky top-0 bg-background/95 backdrop-blur-sm z-10 border-b">
+                  <tr className="text-muted-foreground uppercase text-[10px] font-black tracking-widest">
                     <th className="p-4">Candidate</th>
                     <th className="p-4">ID</th>
-                    <th className="p-4">Domain</th>
+                    <th className="p-4">XP Points</th>
                     <th className="p-4">
-                      <button 
-                        onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
-                        className="flex items-center gap-1 hover:text-primary transition-colors"
-                      >
-                        Progress
-                        {sortOrder === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />}
+                      <button onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')} className="flex items-center gap-1 hover:text-primary transition-colors uppercase">
+                        Progress {sortOrder === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />}
                       </button>
                     </th>
-                    <th className="p-4">Joined</th>
                     <th className="p-4 text-right">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y">
                   {filteredStudents.length > 0 ? filteredStudents.map((s: any) => (
-                    <tr key={s._id} className="hover:bg-muted/30 transition-colors group">
-                      <td className="p-4 font-bold">{s.username}</td>
+                    <tr key={s._id} className="hover:bg-muted/20 transition-colors group">
+                      <td className="p-4">
+                        <div className="font-bold text-foreground">{s.username}</div>
+                        <div className="text-[10px] text-muted-foreground uppercase font-bold">{selectedDomain ? selectedDomain.name : (s.domain || "No Domain")}</div>
+                      </td>
                       <td className="p-4 text-muted-foreground font-mono text-xs">{s.employee_id}</td>
                       <td className="p-4">
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-secondary text-secondary-foreground border border-border">
-                          {selectedDomain ? selectedDomain.name : (s.domain || "N/A")}
-                        </span>
+                        <span className="font-black text-primary">{s.total_xp || 0}</span>
+                        <span className="text-[10px] ml-1 opacity-50 font-bold">XP</span>
                       </td>
                       <td className="p-4 w-48">
                         <div className="flex items-center gap-3">
                           <Progress value={s.path_progress} className="h-1.5 flex-1" />
-                          <span className="text-xs font-medium w-8">{s.path_progress}%</span>
+                          <span className="text-xs font-bold w-8">{s.path_progress}%</span>
                         </div>
                       </td>
-                      <td className="p-4 text-xs text-muted-foreground">
-                        {s.createdAt ? new Date(s.createdAt).toLocaleDateString() : 'N/A'}
-                      </td>
                       <td className="p-4 text-right">
-                        <Button variant="outline" size="sm" onClick={() => navigate(`/admin/students/${s.employee_id}`)}>View Profile</Button>
+                        <Button variant="outline" size="sm" onClick={() => navigate(`/admin/students/${s.employee_id}`)} className="h-8 hover:bg-primary hover:text-primary-foreground transition-all">Details</Button>
                       </td>
                     </tr>
                   )) : (
                     <tr>
-                      <td colSpan={6} className="p-10 text-center text-muted-foreground italic">No candidates found.</td>
+                      <td colSpan={5} className="p-20 text-center text-muted-foreground italic">No candidates match your current filter criteria.</td>
                     </tr>
                   )}
                 </tbody>

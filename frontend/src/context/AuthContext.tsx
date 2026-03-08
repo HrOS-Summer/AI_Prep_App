@@ -9,6 +9,7 @@ export interface User {
   email: string;
   role: UserRole;
   domain?: string;
+  user_id: string; 
 }
 
 interface AuthContextType {
@@ -32,10 +33,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const initializeAuth = () => {
       try {
         const stored = localStorage.getItem("ai_interview_user");
-        // Ensure we don't parse "null" strings as objects
         if (stored && stored !== "undefined" && stored !== "null") {
           const parsedUser = JSON.parse(stored);
-          if (parsedUser && parsedUser.employee_id) {
+          // Check for user_id to ensure we have the MongoDB ObjectId for the interview logic
+          if (parsedUser && parsedUser.user_id && parsedUser.employee_id) {
             setUser(parsedUser);
           }
         }
@@ -63,8 +64,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       const { access_token, user: loggedInUser } = data;
       if (loggedInUser && access_token) {
-        setUser(loggedInUser);
-        localStorage.setItem("ai_interview_user", JSON.stringify(loggedInUser));
+        const userWithId = {
+          ...loggedInUser,
+          // Mandatory mapping for MongoDB compatibility
+          user_id: loggedInUser.user_id || loggedInUser._id 
+        };
+        
+        setUser(userWithId);
+        localStorage.setItem("ai_interview_user", JSON.stringify(userWithId));
         localStorage.setItem("access_token", access_token);
       }
     } catch (error) {
@@ -90,8 +97,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       const { access_token, user: newUser } = data;
       if (newUser && access_token) {
-        setUser(newUser); 
-        localStorage.setItem("ai_interview_user", JSON.stringify(newUser));
+        const userWithId = {
+          ...newUser,
+          user_id: newUser.user_id || newUser._id
+        };
+
+        setUser(userWithId); 
+        localStorage.setItem("ai_interview_user", JSON.stringify(userWithId));
         localStorage.setItem("access_token", access_token);
       }
     } catch (error) {
@@ -105,10 +117,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     queryClient.clear();
     localStorage.removeItem("ai_interview_user");
     localStorage.removeItem("access_token");
+    window.location.href = "/login";
   }, [queryClient]);
 
   const selectDomain = useCallback(async (domain_name: string, domain_id: string) => {
-    // MODIFICATION: Always check storage as a fallback for the most current data
     const currentUser = user || JSON.parse(localStorage.getItem("ai_interview_user") || "null");
 
     if (!currentUser?.employee_id) {
@@ -149,7 +161,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     <AuthContext.Provider 
       value={{ 
         user, 
-        isAuthenticated: !!user && !!user.employee_id, // Stronger check
+        // Ensure both identifiers exist for a valid session
+        isAuthenticated: !!user && !!user.user_id && !!user.employee_id, 
         loading, 
         login, 
         signup, 
