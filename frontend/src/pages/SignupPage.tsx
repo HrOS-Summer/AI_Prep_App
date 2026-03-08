@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { motion, AnimatePresence } from "framer-motion";
-import { CheckCircle2, XCircle, AlertCircle } from "lucide-react";
+import { CheckCircle2, XCircle, AlertCircle, Eye, EyeOff } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
 const passwordRules = [
@@ -24,6 +24,7 @@ const SignupPage = () => {
   const [employeeId, setEmployeeId] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false); // Added for password toggle
   const [loading, setLoading] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
 
@@ -65,6 +66,14 @@ const SignupPage = () => {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
+      {/* CSS Fix: Hiding Edge/IE default password reveal icon to prevent UI overlapping */}
+      <style dangerouslySetInnerHTML={{ __html: `
+        input::-ms-reveal,
+        input::-ms-clear {
+          display: none;
+        }
+      `}} />
+
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
         <Card className="w-full max-w-md shadow-elevated border-border/50">
           <CardHeader className="text-center pb-2">
@@ -99,7 +108,7 @@ const SignupPage = () => {
                     if (serverError) setServerError(null);
                   }} 
                   onBlur={() => handleBlur("employeeId")}
-                  placeholder="Enter 7-digit ID" 
+                  placeholder="Enter employee ID" 
                   className={touched.employeeId && !isIdValid ? "border-destructive" : ""}
                   required 
                 />
@@ -135,7 +144,29 @@ const SignupPage = () => {
               {/* Password - Rule validation remains visible while typing */}
               <div className="space-y-2">
                 <Label htmlFor="password">Password</Label>
-                <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Create a password" required />
+                <div className="relative">
+                  <Input 
+                    id="password" 
+                    type={showPassword ? "text" : "password"} 
+                    value={password} 
+                    onChange={(e) => setPassword(e.target.value)} 
+                    placeholder="Create a password" 
+                    className="pr-10"
+                    required 
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                    disabled={loading}
+                  >
+                    {showPassword ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
+                  </button>
+                </div>
                 {password && (
                   <div className="space-y-1 mt-2">
                     {passwordRules.map((rule) => (
