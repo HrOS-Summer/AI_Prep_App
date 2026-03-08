@@ -6,13 +6,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { motion, AnimatePresence } from "framer-motion";
-import { GraduationCap, ShieldCheck, AlertCircle, Loader2 } from "lucide-react";
+import { GraduationCap, ShieldCheck, AlertCircle, Loader2, Eye, EyeOff, Server } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
 const LoginPage = () => {
   const [role, setRole] = useState<UserRole>("student");
   const [employeeId, setEmployeeId] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isTakingLong, setIsTakingLong] = useState(false);
@@ -20,7 +21,6 @@ const LoginPage = () => {
   const { login } = useAuth();
   const navigate = useNavigate();
 
-  // Reset "taking long" state if loading finishes
   useEffect(() => {
     if (!loading) {
       setIsTakingLong(false);
@@ -33,11 +33,10 @@ const LoginPage = () => {
     setError(null);
     setIsTakingLong(false);
 
-    // If the server is on Render Free Tier, it might take 30s+ to wake up.
-    // We show a message after 5 seconds to manage user expectations.
+    // Timer for slow server wake-up (Render Free Tier logic)
     const timer = setTimeout(() => {
       setIsTakingLong(true);
-    }, 5000);
+    }, 4000);
 
     try {
       await login(employeeId, password, role);
@@ -58,7 +57,9 @@ const LoginPage = () => {
         }
       }
     } catch (err: any) {
-      setError(err.message || "Invalid credentials. Please try again.");
+      // Clear long-loading state immediately on error so messages don't overlap
+      setIsTakingLong(false); 
+      setError("Invalid credentials. Please check your Employee ID and password.");
     } finally {
       clearTimeout(timer);
       setLoading(false);
@@ -67,6 +68,13 @@ const LoginPage = () => {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
+      <style dangerouslySetInnerHTML={{ __html: `
+        input::-ms-reveal,
+        input::-ms-clear {
+          display: none;
+        }
+      `}} />
+      
       <motion.div 
         initial={{ opacity: 0, y: 20 }} 
         animate={{ opacity: 1, y: 0 }} 
@@ -83,39 +91,39 @@ const LoginPage = () => {
           <CardContent>
             
             <AnimatePresence mode="wait">
-              {/* Error Message */}
-              {error && (
+              {/* Prioritize Error message */}
+              {error ? (
                 <motion.div
+                  key="error-alert"
                   initial={{ opacity: 0, height: 0 }}
                   animate={{ opacity: 1, height: "auto" }}
                   exit={{ opacity: 0, height: 0 }}
                   className="mb-4"
                 >
-                  <Alert variant="destructive" className="py-2">
+                  <Alert variant="destructive" className="py-2 border-destructive/50 bg-destructive/5">
                     <AlertCircle className="h-4 w-4" />
-                    <AlertDescription className="text-xs">{error}</AlertDescription>
+                    <AlertDescription className="text-xs font-medium">{error}</AlertDescription>
                   </Alert>
                 </motion.div>
-              )}
-
-              {/* Render Cold Start Warning */}
-              {loading && isTakingLong && (
+              ) : loading && isTakingLong ? (
+                /* Improved neutral message for slow connections */
                 <motion.div
+                  key="loading-alert"
                   initial={{ opacity: 0, y: -10 }}
                   animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
                   className="mb-4"
                 >
-                  <Alert className="bg-amber-50 border-amber-200 text-amber-800 py-2">
-                    <Loader2 className="h-4 w-4 animate-spin" />
+                  <Alert className="bg-muted/50 border-border text-muted-foreground py-2 italic">
+                    <Server className="h-4 w-4 animate-pulse" />
                     <AlertDescription className="text-xs ml-2">
-                      Setting up your personalized training environment. This may take a moment...
+                      Connecting to secure server... this usually takes a few seconds.
                     </AlertDescription>
                   </Alert>
                 </motion.div>
-              )}
+              ) : null}
             </AnimatePresence>
 
-            {/* Role Toggle */}
             <div className="flex rounded-lg bg-muted p-1 mb-6">
               {(["student", "admin"] as UserRole[]).map((r) => (
                 <button
@@ -149,15 +157,26 @@ const LoginPage = () => {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="password">Password</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  required
-                  disabled={loading}
-                />
+                <div className="relative">
+                  <Input
+                    id="password"
+                    type={showPassword ? "text" : "password"}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className="pr-10"
+                    required
+                    disabled={loading}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                    disabled={loading}
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
               </div>
               <Button 
                 type="submit" 
@@ -165,7 +184,7 @@ const LoginPage = () => {
                 disabled={loading}
               >
                 {loading && <Loader2 className="h-4 w-4 animate-spin" />}
-                {loading ? "Signing in..." : "Sign In"}
+                {loading ? "Verifying..." : "Sign In"}
               </Button>
             </form>
 
