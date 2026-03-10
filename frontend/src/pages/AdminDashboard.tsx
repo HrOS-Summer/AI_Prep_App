@@ -29,7 +29,7 @@ const AdminDashboard = () => {
     }
   });
 
-  // 2. ALL Students (Registry Data)
+  // 2. ALL Students (Default View)
   const { data: allStudents, isLoading: isAllStudentsLoading } = useQuery({
     queryKey: ["allStudents"],
     queryFn: async () => {
@@ -72,15 +72,18 @@ const AdminDashboard = () => {
     const avgProgress = totalInDomain > 0 
       ? Math.round(domainUsers.reduce((acc: number, curr: any) => acc + (Number(curr.path_progress) || 0), 0) / totalInDomain) 
       : 0;
-    
-    // Calculate total interviews for this domain by summing student counts
+
+    // LOGIC FIX 1: Calculate total interviews for this domain specifically
     const domainInterviews = domainUsers.reduce((acc: number, curr: any) => acc + (Number(curr.total_interviews) || 0), 0);
+
+    // LOGIC FIX 2: Find the student with the HIGHEST progress for the "Top Performer" card
+    const topPerformerInDomain = [...domainUsers].sort((a, b) => (Number(b.path_progress) || 0) - (Number(a.path_progress) || 0))[0];
     
     return [
       { label: `${selectedDomain.name} Candidates`, value: totalInDomain, icon: Users, color: "bg-blue-500/10 text-blue-600" },
       { label: "Avg Progress", value: `${avgProgress}%`, icon: BookOpen, color: "bg-purple-500/10 text-purple-600" },
-      { label: "Domain Interviews", value: domainInterviews, icon: Mic, color: "bg-orange-500/10 text-orange-600" },
-      { label: "Top Performer", value: domainUsers[0]?.username || "N/A", icon: Star, color: "bg-amber-500/10 text-amber-600" },
+      { label: "Interviews Held", value: domainInterviews, icon: Mic, color: "bg-orange-500/10 text-orange-600" }, // Removed "Active" status
+      { label: "Top Performer", value: topPerformerInDomain?.username || "N/A", icon: Star, color: "bg-amber-500/10 text-amber-600" },
     ];
   }, [selectedDomain, domainUsers, dashboardData]);
 
@@ -105,6 +108,7 @@ const AdminDashboard = () => {
   }, [selectedDomain, domainUsers, allStudents, debouncedSearch, sortOrder]);
 
   const filteredAlerts = useMemo(() => {
+    // LOGIC FIX 3: Critical alerts are explicitly provided by the backend from students who FAILED quizzes
     const alerts = dashboardData?.underperforming_students || [];
     if (!selectedDomain) return alerts;
     return alerts.filter((alert: any) => 

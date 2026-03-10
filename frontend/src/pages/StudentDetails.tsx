@@ -253,7 +253,7 @@ const StudentDetails = () => {
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-muted/30 p-8 rounded-2xl border border-border/50">
           <div className="flex items-center gap-6">
             <div className="h-16 w-16 rounded-2xl bg-primary text-white flex items-center justify-center text-2xl font-black shadow-lg shadow-primary/20">
-              #{studentData.header.rank}
+              {studentData.header.rank}
             </div>
             <div>
               <h1 className="text-3xl font-black tracking-tight">{studentData.header.username}</h1>
@@ -293,7 +293,7 @@ const StudentDetails = () => {
                   </div>
                   <div className="p-5 rounded-2xl bg-background border shadow-sm">
                       <p className="text-[10px] font-black uppercase text-muted-foreground mb-1 tracking-widest">Average Accuracy</p>
-                      <p className="text-3xl font-black text-primary">{studentData.curriculum.avg_interview_score}%</p>
+                      <p className="text-3xl font-black text-primary">{studentData.curriculum.avg_interview_score}</p>
                   </div>
                 </div>
             </CardContent>
