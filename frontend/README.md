@@ -1,5 +1,5 @@
 
-# AI Prep App — Frontend
+# Prepzen — Frontend
 
 A fast, modern **AI‑powered interview preparation** web app frontend built with **Vite + React + TypeScript**, styled with **Tailwind CSS**, and tested with **Vitest**. It provides an engaging dashboard and report cards to help users practice and track progress.
 
